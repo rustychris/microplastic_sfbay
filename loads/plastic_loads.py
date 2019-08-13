@@ -1,8 +1,14 @@
+import os
 from stompy import utils
 import xarray as xr
 import numpy as np
 
-utils.path("/home/rusty/mirrors/ucd-google/Projects/Microplastics/12_Transport Model/field_data")
+try:
+    cwd=os.path.dirname(__file__)
+except NameError:
+    cwd="." # assume interactive use from same directory
+    
+utils.path(os.path.join(cwd, "../field_data"))
 
 import plastic_data
 
@@ -14,9 +20,9 @@ import plastic_data
 #              0,
 #              -0.06,-0.02,-0.006,-0.002,-0.0006]
 
-w_s_centers=[0.05,0.005,0.0005,
-             0,
-             -0.05,-0.005,-0.0005]
+w_s_centers=np.array([0.05,0.005,0.0005,
+                      0,
+                      -0.05,-0.005,-0.0005])
 
 w_s_centers.sort()
 
@@ -223,6 +229,10 @@ for station in stationcodes:
 # StationCode: 'CCCSD', 'EBDA', 'EBMUD', 'FSSD', 'LABQA', 'PA', 'SFPUC', 'SJ', 'SUNN'
 
 # ds depends on w_s_centers, so don't write it out
+
+##
+
+ds.to_netcdf('plastic_loads-7classes.nc')
 
 ##
 
