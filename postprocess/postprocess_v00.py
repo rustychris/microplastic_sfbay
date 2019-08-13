@@ -7,6 +7,8 @@ each source x settling velocity combination.
 
 """
 import xarray as xr
+import glob
+import numpy as np
 from stompy import utils, memoize
 from stompy.model.fish_ptm import ptm_tools
 from stompy.grid import unstructured_grid
@@ -170,11 +172,11 @@ class PtmRun(object):
 ##
 
 # Ultimately the interface is probably something along the lines of
-ptm_runs=[ PtmRun(run_dir="../all_sources/all_source_select_w_const") ]
+ptm_runs=[ PtmRun(run_dir="../../sfb_ocean/ptm/all_sources/all_source_select_w_const") ]
 
 # May not be the right grid -- would be better to copy in a grid from
 # one of the original ptm hydro paths
-grid=unstructured_grid.UnstructuredGrid.from_ugrid("../../suntans/grid-merged/spliced_grids_01_bathy.nc")
+grid=unstructured_grid.UnstructuredGrid.from_ugrid("../../sfb_ocean/suntans/grid-merged/spliced_grids_01_bathy.nc")
 
 ##
 
@@ -195,6 +197,16 @@ def scan_group(self,group,time_range,z_range=None,grid=None,
                max_age=np.timedelta64(30,'D'),spinup=None,
                weight=1.0,
                extra_fields=[]):
+    """
+    group: name of the group to scan
+    time_range: a pair of datetime64 denoting the range of time steps to include
+    z_range: a pair of z coordinates denoting what part of the water column to include.
+     - this requires a grid which has per-cell z_bed with the same datum as
+       the ptm run.
+     - values are taken as positive-up, with bed=0.
+
+     currently experimenting with having the z_range part in a post processing step.
+    """
     if spinup is None: spinup=max_age
 
     ret_dtype=base_ret_dtype+extra_fields
@@ -274,6 +286,8 @@ def scan_group(self,group,time_range,z_range=None,grid=None,
             sel=age < max_age
             # this is where we could further filter on where the particles
             # are, further narrowing the sel array
+            # but doing the z_range filter after the fact will make it easier
+            # to streamline, and probably more efficient than doing it here.
             assert z_range is None,"Have not implemented z-range yet"
             
             ret=np.zeros(len(parts[sel]),ret_dtype)
@@ -380,6 +394,17 @@ part_obs=query_runs(ptm_runs,
                     conc_func=conc_func,
                     grid=grid)
 
+
+##
+
+# Filter by z_range in a separate step, so there's the possibility
+# of more speedup.
+
+# def filter_by_z_range(part_obs,z_range,grid):
+
+
+
+##
 # that returned 4.8M points.  with output for a single time step
 # via time_range, that becomes 41k.
 # 18 groups.
