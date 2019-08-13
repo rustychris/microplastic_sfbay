@@ -6,11 +6,12 @@ The goal is to generate concentration fields on the computational grid reflectin
 each source x settling velocity combination.
 
 """
-import xarray as xr
 import glob
 import numpy as np
+import xarray as xr
 from stompy import utils, memoize
 from stompy.model.fish_ptm import ptm_tools
+from stompy.model.suntans import sun_driver
 from stompy.grid import unstructured_grid
 
 import os
@@ -172,11 +173,26 @@ class PtmRun(object):
 ##
 
 # Ultimately the interface is probably something along the lines of
-ptm_runs=[ PtmRun(run_dir="../../sfb_ocean/ptm/all_sources/all_source_select_w_const") ]
+if 1: # laptop
+    ptm_runs=[ PtmRun(run_dir="../../sfb_ocean/ptm/all_sources/all_source_select_w_const") ]
 
-# May not be the right grid -- would be better to copy in a grid from
-# one of the original ptm hydro paths
-grid=unstructured_grid.UnstructuredGrid.from_ugrid("../../sfb_ocean/suntans/grid-merged/spliced_grids_01_bathy.nc")
+    # May not be the right grid -- would be better to copy in a grid from
+    # one of the original ptm hydro paths
+    grid=unstructured_grid.UnstructuredGrid.from_ugrid("../../sfb_ocean/suntans/grid-merged/spliced_grids_01_bathy.nc")
+else:    
+    ptm_runs=[
+        PtmRun(run_dir="/opt2/sfb_ocean/ptm/all_source/20170615/w-0.05"),
+        PtmRun(run_dir="/opt2/sfb_ocean/ptm/all_source/20170615/w-0.005"),
+        PtmRun(run_dir="/opt2/sfb_ocean/ptm/all_source/20170615/w-0.0005"),
+        PtmRun(run_dir="/opt2/sfb_ocean/ptm/all_source/20170615/w0.0"),
+        PtmRun(run_dir="/opt2/sfb_ocean/ptm/all_source/20170615/w0.0005"),
+        PtmRun(run_dir="/opt2/sfb_ocean/ptm/all_source/20170615/w0.005"),
+        PtmRun(run_dir="/opt2/sfb_ocean/ptm/all_source/20170615/w0.05"),
+    ]
+    
+    # May not be the right grid -- would be better to copy in a grid from
+    # one of the original ptm hydro paths
+    grid=unstructured_grid.UnstructuredGrid.from_ugrid("/home/rusty/src/sfb_ocean/suntans/grid-merge-suisun/spliced-bathy.nc")
 
 ##
 
@@ -307,7 +323,12 @@ def scan_group(self,group,time_range,z_range=None,grid=None,
             pass
 
     return np.concatenate(ret_particles)
-               
+
+
+# POTWs that I'm not worrying about, but are still left in
+# the PTM runs.
+skip_source=['petaluma']
+
 def query_runs(ptm_runs,group_patt,time_range,z_range=None,grid=None,
                max_age=np.timedelta64(30,'D'),
                spinup=None,
@@ -364,6 +385,9 @@ def query_runs(ptm_runs,group_patt,time_range,z_range=None,grid=None,
             log.info(f"{run.run_dir:30s}: {group}")
 
             src_name,behavior_name=run.group_to_src_behavior(group)
+            if src_name in skip_source:
+                log.info(f"Will skip source {src_name} -- it's in skip_source")
+                continue
             conc=conc_func(group,src_name,behavior_name)
             
             part_obs=scan_group(run,group,time_range=time_range,z_range=z_range,
@@ -376,24 +400,49 @@ def query_runs(ptm_runs,group_patt,time_range,z_range=None,grid=None,
     assert np.isnan(result['grp_rel_per_hour']).sum()==0
     return result
 
+##
+
+conc_ds=xr.open_dataset("../loads/plastic_loads-7classes.nc")
+# Group: UALAMEDA_up50000 UALAMEDA up50000
 
 def conc_func(group,src,behavior):
+    if behavior=='none':
+        w_s=0.0
+    else:
+        w_s=float(behavior.replace('up','-').replace('down',''))/1e6
+    
     if src in ['SacRiver','SJRiver']:
         print(f"Got {src} -- returning 0.001")
         return 0.001
     else:
-        return 1.0
+        source_map={'NAPA':'stormwater',
+                    'COYOTE':'stormwater',
+                    'SCLARAVCc':'stormwater',
+                    'UALAMEDA':'stormwater',
+                    'cccsd':'CCCSD',
+                    'src000':'EBDA',
+                    'src001':'EBMUD',
+                    'sunnyvale':'SUNN',
+                    'fs':'FSSD',
+                    'palo_alto':'PA',
+                    'src002':'SFPUC',
+                    'san_jose':'SJ'}
+        source=source_map[src]
+
+    return conc_ds.conc.sel(w_s=w_s,source=source).item()    
+
+##
+
 
 # A 1 hour window gives 27k particles
 part_obs=query_runs(ptm_runs,
-                    group_patt='.*_up2000',
+                    group_patt='.*_up5000',
                     time_range=[np.datetime64("2017-07-30 00:00"),
                                 np.datetime64("2017-07-30 13:00")],
                     z_range=None, # not ready
                     max_age=np.timedelta64(50,'D'),
                     conc_func=conc_func,
                     grid=grid)
-
 
 ##
 
@@ -443,7 +492,6 @@ conc0=particle_to_density(particles,grid,normalize='area')
 
 M=grid.smooth_matrix(f=0.5,dx='grid',A='grid',V='grid',K='scaled')
 
-## 
 conc=conc0
 for _ in range(20):
     conc=M.dot(conc)
@@ -480,6 +528,8 @@ ccoll=grid.plot_cells(values=conc.clip(1e-5,np.inf),ax=ax,lw=0.5,cmap='jet',
 ccoll.set_edgecolor('face')
 
 plt.colorbar(ccoll,label='Conc',ax=ax)
+
+fig.savefig('sample-output-up5000.png',dpi=120)
 
 # plt.setp(axs,aspect='equal')
 
