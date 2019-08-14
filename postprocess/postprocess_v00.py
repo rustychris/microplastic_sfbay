@@ -189,6 +189,10 @@ def scan_group(self,group,time_range,z_range=None,grid=None,
     """
     group: name of the group to scan
     time_range: a pair of datetime64 denoting the range of time steps to include
+    mass is returned per particle, based on the number of particles released per hour,
+      the flow associated with the particular source, and the number of time steps 
+      integrated over.
+
     z_range: a pair of z coordinates denoting what part of the water column to include.
      - this requires a grid which has per-cell z_bed with the same datum as
        the ptm run.
@@ -233,12 +237,16 @@ def scan_group(self,group,time_range,z_range=None,grid=None,
     ret_particles=[]
 
     Qfunc=self.get_Qfunc_for_group(group)
+
+    # how many time steps of output fell within time_range (and
+    # thus the denominator for averaging mass after the loop)
+    n_steps_included=0
     
     for ti in range(nsteps):
         t,parts=bf.read_timestep(ti)
         t=utils.to_dt64(t)
         if t>=time_range[1]:
-            log.info("Read beyond the time range. Done with this group")
+            log.debug("Read beyond the time range. Done with this group")
             break
         
         max_part_id=parts['id'].max()
@@ -267,9 +275,11 @@ def scan_group(self,group,time_range,z_range=None,grid=None,
         
         # g/m3 * m3/s * s/hr / (particles/hour)
         # => g/particle
+        # and added /nsteps to get an average
         particles['mass'][new_ids]=weight*Q*3600/grp_rel_per_hour
         
         if (t-t0>=spinup) and (t>=time_range[0]):
+            n_steps_included += 1
             # at this point only filter on age.
             age=(t-particles['rel_time'][parts['id']])
             sel=age < max_age
@@ -295,7 +305,10 @@ def scan_group(self,group,time_range,z_range=None,grid=None,
             # particles
             pass
 
-    return np.concatenate(ret_particles)
+    result=np.concatenate(ret_particles)
+    # averaging in time:
+    result['mass'] /= n_steps_included
+    return result
 
 
 # POTWs that I'm not worrying about, but are still left in
@@ -328,9 +341,14 @@ def query_runs(ptm_runs,group_patt,time_range,z_range=None,grid=None,
         spinup=max_age
 
     if run_weights is None:
-        # straight average.  not great if one run has higher release rate.
+        # straight sum.  assumes that there is no duplication across runs
         run_weights=np.ones(len(ptm_runs))/float(len(ptm_runs))
 
+    if not group_patt.endswith('$'):
+        group_patt+="$"
+    if not group_patt.startswith('^'):
+        group_patt='^' + group_patt
+        
     # compile an array of particles that are
     #  (i) observed within the time_range, limited to output steps
     #      at least spinup into that specific run
@@ -350,7 +368,7 @@ def query_runs(ptm_runs,group_patt,time_range,z_range=None,grid=None,
     # fist step is to scan each matching group of each run, and
     # populate everything but mass
     all_part_obs=[]
-    
+    groups=[]    
     for run_idx,run in enumerate(ptm_runs):
         for group in run.groups():
             if re.match(group_patt,group) is None:
@@ -361,6 +379,7 @@ def query_runs(ptm_runs,group_patt,time_range,z_range=None,grid=None,
             if src_name in skip_source:
                 log.info(f"Will skip source {src_name} -- it's in skip_source")
                 continue
+            groups.append(group)
             conc=conc_func(group,src_name,behavior_name)
             
             part_obs=scan_group(run,group,time_range=time_range,z_range=z_range,
@@ -374,7 +393,14 @@ def query_runs(ptm_runs,group_patt,time_range,z_range=None,grid=None,
 
     # Convert to xarray Dataset for easier processing down the line.
     ds=xr_utils.structure_to_dataset(result,'particle',{'x':('xyz',)})
-    
+
+    # and include some metadata
+    ds['group_pattern']=(),group_patt
+    ds['time_start']=(),time_range[0]
+    ds['time_end']  =(),time_range[1]
+    ds['max_age']=(),max_age
+    ds['ptm_runs']=('ptm_run',), [p.run_dir for p in ptm_runs]
+    ds['ptm_groups']=('ptm_groups',), groups
     return ds
 
 ##
@@ -393,7 +419,7 @@ def conc_func(group,src,behavior):
     w_s_i=utils.nearest(conc_ds.w_s.values,w_s)
     
     if src in ['SacRiver','SJRiver']:
-        print(f"Got {src} -- returning 0.001")
+        log.info(f"Got {src} -- returning 0.001")
         return 0.001
     else:
         source_map={'NAPA':'stormwater',
@@ -420,16 +446,7 @@ def add_cells(particles,grid,overwrite=False):
     """
     if 'cell' in particles and not overwrite:
         return particles
-
-    cells=-np.ones(particles.dims['particle'],
-                   np.int32)
-    x=particles['x'].values
-    for i in utils.progress(range(len(cells))):
-        cell=grid.select_cells_nearest(x[i,:2], inside=True)
-        if cell is None: continue
-        cells[i]=cell
-
-    particles['cell']=('particle',),cells
+    particles['cell']=('particle',),grid.points_to_cells(particles['x'].values[:,:2])
     return particles
 
 def add_z_info(particles,grid):
