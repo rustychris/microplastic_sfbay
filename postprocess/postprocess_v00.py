@@ -175,10 +175,35 @@ class PtmRun(object):
 # Ultimately the interface is probably something along the lines of
 if 1: # laptop
     ptm_runs=[ PtmRun(run_dir="../../sfb_ocean/ptm/all_sources/all_source_select_w_const") ]
+    # ptm_runs=[ PtmRun(run_dir="../../sfb_ocean/ptm/all_source/20180115/w-0.0005") ]
 
-    # May not be the right grid -- would be better to copy in a grid from
-    # one of the original ptm hydro paths
-    grid=unstructured_grid.UnstructuredGrid.from_ugrid("../../sfb_ocean/suntans/grid-merged/spliced_grids_01_bathy.nc")
+    if 0:
+        # May not be the right grid -- would be better to copy in a grid from
+        # one of the original ptm hydro paths
+        grid=unstructured_grid.UnstructuredGrid.from_ugrid("../../sfb_ocean/suntans/grid-merged/spliced_grids_01_bathy.nc")
+        # include a z_bed field which matches the hydro that was used to run the PTM.
+        # in this case, I know that cells['depth'] in the above file is positive up, no shift, no clip.
+        # also know that the minimum depth is always 0.1, and bathy is clipped to that before being written.
+        # would be better to read in the real thing..
+        grid.add_cell_field('z_bed',(grid.cells['depth'] - 5.0).clip(-np.inf,-0.1))
+    else:
+        grid_fn="/home/rusty/src/sfb_ocean/suntans/runs/merged_018_20171227/ptm_average.nc_0000.nc"
+        ds=xr.open_dataset(grid_fn)
+        ds['Mesh2']=(),1
+        ds.Mesh2.attrs.update(dict(cf_role='mesh_topology',
+                                   node_coordinates='Mesh2_node_x Mesh2_node_y',
+                                   face_node_connectivity='Mesh2_face_nodes',
+                                   edge_node_connectivity='Mesh2_edge_nodes',
+                                   node_dimension='nMesh2_node',
+                                   edge_dimension='nMesh2_edge',
+                                   face_dimension='nMesh2_face',
+                                   face_coordinates='Mesh2_face_x Mesh2_face_y',
+                                   edge_coordinates='Mesh2_edge_x Mesh2_edge_y'))
+        grid=unstructured_grid.UnstructuredGrid.from_ugrid(ds)
+        # This is straight from the output, so no need to add bathy offset
+        grid.add_cell_field('z_bed',-grid.cells['Mesh2_face_depth'])
+        
+    group_patt='.*_down2000'
 else:    
     ptm_runs=[
         PtmRun(run_dir="/opt2/sfb_ocean/ptm/all_source/20170615/w-0.05"),
@@ -193,6 +218,7 @@ else:
     # May not be the right grid -- would be better to copy in a grid from
     # one of the original ptm hydro paths
     grid=unstructured_grid.UnstructuredGrid.from_ugrid("/home/rusty/src/sfb_ocean/suntans/grid-merge-suisun/spliced-bathy.nc")
+    group_patt='.*_down500'
 
 ##
 
@@ -327,7 +353,7 @@ def scan_group(self,group,time_range,z_range=None,grid=None,
 
 # POTWs that I'm not worrying about, but are still left in
 # the PTM runs.
-skip_source=['petaluma']
+skip_source=['petaluma','sonoma_valley','ddsd','lg']
 
 def query_runs(ptm_runs,group_patt,time_range,z_range=None,grid=None,
                max_age=np.timedelta64(30,'D'),
@@ -405,11 +431,15 @@ def query_runs(ptm_runs,group_patt,time_range,z_range=None,grid=None,
 conc_ds=xr.open_dataset("../loads/plastic_loads-7classes.nc")
 # Group: UALAMEDA_up50000 UALAMEDA up50000
 
+@memoize.memoize()
 def conc_func(group,src,behavior):
     if behavior=='none':
         w_s=0.0
     else:
         w_s=float(behavior.replace('up','-').replace('down',''))/1e6
+
+    # for laptop
+    w_s_i=utils.nearest(conc_ds.w_s.values,w_s)
     
     if src in ['SacRiver','SJRiver']:
         print(f"Got {src} -- returning 0.001")
@@ -429,28 +459,149 @@ def conc_func(group,src,behavior):
                     'san_jose':'SJ'}
         source=source_map[src]
 
-    return conc_ds.conc.sel(w_s=w_s,source=source).item()    
+    return conc_ds.conc.isel(w_s=w_s_i).sel(source=source).item()
 
 ##
 
-
 # A 1 hour window gives 27k particles
 part_obs=query_runs(ptm_runs,
-                    group_patt='.*_up5000',
+                    group_patt=group_patt,
                     time_range=[np.datetime64("2017-07-30 00:00"),
-                                np.datetime64("2017-07-30 13:00")],
+                                np.datetime64("2017-07-30 03:00")],
                     z_range=None, # not ready
                     max_age=np.timedelta64(50,'D'),
                     conc_func=conc_func,
                     grid=grid)
 
 ##
+def add_cells(particles,grid,overwrite=False):
+    if 'cell' not in particles.dtype.names:
+        overwrite=True
+        particles=utils.recarray_add_fields(particles,[('cell',
+                                                        -np.ones(len(particles),np.int32))])
+    if overwrite:
+        particles['cell'][:]=-1
+        
+        for i in utils.progress(range(len(particles))):
+            cell=grid.select_cells_nearest( particles['x'][i,:2],inside=True )
+            if cell is None: continue
+            particles['cell'][i]=cell
+    return particles
 
+## 
 # Filter by z_range in a separate step, so there's the possibility
 # of more speedup.
+z_range=[0,0.5]
 
-# def filter_by_z_range(part_obs,z_range,grid):
+def filter_by_z_range(part_obs,z_range,grid):
+    assert z_range[0]>=0,"Not ready for surface referenced"
+    assert z_range[1]>0.0,"Not ready for surface referenced"
 
+    part_obs=add_cells(part_obs,grid,overwrite=True)
+
+    # assume that whoever loaded/supplied the grid has created a
+    # cells['z_bed'] field which is positive-up, and includes any
+    # bathy offset
+
+    part_z_bed=grid.cells['z_bed'][part_obs['cell']]
+    valid=part_obs['cell']>=0
+    part_z_bed[~valid]=np.nan
+    part_hab=part_obs['x'][:,2] - part_z_bed
+
+    if 'z_bed' not in part_obs.dtype.names:
+        new_fields=('z_bed',part_z_bed)
+    else:
+        part_obs['z_bed'][:] = part_z_bed
+        
+        new_fields=[ fld for fld in ['z_bed','z_hab']
+                 if fld not in part_obs.dtype.names]
+    
+
+## 
+plt.figure(1).clf() ; plt.hist(part_hab,200)
+# plt.figure(1).clf() ; plt.hist(part_z_bed,200)# looks fine
+# plt.figure(1).clf() ; plt.hist(part_obs['x'][:,2],200)
+
+## That's showing a lot of cells that are below the bed.  wtf?
+
+# maybe those are cells that diffused horizontally too much?
+bad=np.isfinite(part_hab) & (part_hab<-1)
+good=np.isfinite(part_hab) & (part_hab>=0)
+
+##
+
+# Look at the history of a particle that's below the bed
+bad_i=np.nonzero(bad)[0][0]
+print(f"part idx {bad_i}: z={part_obs['x'][bad_i,2]} z_bed={part_z_bed[bad_i]}  hab={part_hab[bad_i]}")
+bad_part=part_obs['part_id'][bad_i]
+for name in part_obs.dtype.names:
+    print(f"  {name}: {part_obs[name][bad_i]}")
+
+##
+
+ptm_run=ptm_runs[part_obs['run_idx'][bad_i]]
+
+bf=ptm_run.open_binfile(part_obs['group'][bad_i])
+
+##
+
+nsteps=bf.count_timesteps()
+
+times=[]
+recs=[]
+
+for s in utils.progress(range(nsteps)):
+    t,p=bf.read_timestep(s)
+    sel=np.nonzero( p['id']==bad_part)[0]
+    if len(sel):
+        assert len(sel)==1,"what?"
+        recs.append( p[sel[0]].copy() )
+        times.append(utils.to_dt64(t))
+traj=np.array(recs)
+
+traj=add_cells(traj,grid)
+
+t=np.array(times)
+
+##
+plt.figure(3).clf()
+ccoll=grid.plot_cells(values=grid.cells['z_bed'],cmap='jet',clim=[-20,0])
+
+plt.plot(traj['x'][:,0],
+         traj['x'][:,1],
+         'k-',zorder=1)
+scat=plt.scatter(traj['x'][:,0],
+                 traj['x'][:,1],
+                 20,
+                 traj['x'][:,2],cmap='jet',zorder=2)
+scat.set_clim([-20,0])
+plt.axis('equal')
+plt.axis( (575943., 581457., 4211703., 4215158.) )
+
+# So this specific one starts at CCCSD, sloshes over to the ghost fleet,
+# and weasles its way onto the shoal, and sometimes out of the grid.
+
+##
+
+plt.figure(4).clf()
+plt.plot(t,traj['x'][:,2],'g',label='Particle z')
+plt.plot(t,grid.cells['z_bed'][traj['cell']],'k',label='Cell z_bed')
+plt.legend()
+
+##
+
+plt.figure(2).clf()
+
+ccoll=grid.plot_cells(values=grid.cells['z_bed'],cmap='jet',clim=[-20,0])
+scat=plt.scatter(part_obs['x'][good,0],
+                 part_obs['x'][good,1],
+                 20,
+                 part_obs['x'][good,2],
+                 cmap='jet')
+scat.set_clim([-20,0])
+    
+plt.colorbar(ccoll)
+plt.axis('equal')
 
 
 ##
@@ -461,21 +612,22 @@ part_obs=query_runs(ptm_runs,
 # 30 days*24 hr/day * 5 particles/grp/hr *18 grps
 # but time range includes 5 days,
 
-## 
 particles=part_obs
 
 def particle_to_density(particles,grid,normalize='area'):
     """
-    particles: struct array with 'x' and 'mass'
+    particles: struct array with 'x' and 'mass', optionally with 'cell'
     normalize: 'area' normalize by cell areas to get a mass/area
                'volume': Not implemented yet.
     """
 
     mass=np.zeros(grid.Ncells(),np.float64)
 
+    particles=add_cells(particles,grid)
+    
     for i in utils.progress(range(len(particles))):
-        cell=grid.select_cells_nearest( particles['x'][i,:2] )
-        if cell is None: continue
+        cell=particles['cell'][i]
+        if cell<0: continue
         mass[cell] += particles['mass'][i]
 
     if normalize=='area':
