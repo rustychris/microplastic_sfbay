@@ -172,21 +172,6 @@ class PtmRun(object):
     
 ##
 
-# Ultimately the interface is probably something along the lines of
-ptm_runs=[
-    PtmRun(run_dir="/opt2/sfb_ocean/ptm/all_source/20170615/w-0.05"),
-    PtmRun(run_dir="/opt2/sfb_ocean/ptm/all_source/20170615/w-0.005"),
-    PtmRun(run_dir="/opt2/sfb_ocean/ptm/all_source/20170615/w-0.0005"),
-    PtmRun(run_dir="/opt2/sfb_ocean/ptm/all_source/20170615/w0.0"),
-    PtmRun(run_dir="/opt2/sfb_ocean/ptm/all_source/20170615/w0.0005"),
-    PtmRun(run_dir="/opt2/sfb_ocean/ptm/all_source/20170615/w0.005"),
-    PtmRun(run_dir="/opt2/sfb_ocean/ptm/all_source/20170615/w0.05"),
-]
-
-# May not be the right grid -- would be better to copy in a grid from
-# one of the original ptm hydro paths
-grid=unstructured_grid.UnstructuredGrid.from_ugrid("/home/rusty/src/sfb_ocean/suntans/grid-merge-suisun/spliced-bathy.nc")
-
 ##
 
 # information that will be filled in by scan_group()
@@ -206,6 +191,14 @@ def scan_group(self,group,time_range,z_range=None,grid=None,
                max_age=np.timedelta64(30,'D'),spinup=None,
                weight=1.0,
                extra_fields=[]):
+    """
+    group: name of the group to scan
+    time_range: a pair of datetime64 denoting the range of time steps to include
+    z_range: a pair of z coordinates denoting what part of the water column to include.
+     - this requires a grid which has per-cell z_bed with the same datum as
+       the ptm run.
+     - values are taken as positive-up, with bed=0.
+    """
     if spinup is None: spinup=max_age
 
     ret_dtype=base_ret_dtype+extra_fields
@@ -413,11 +406,38 @@ def conc_func(group,src,behavior):
     return conc_ds.conc.sel(w_s=w_s,source=source).item()    
 
 ##
+import socket
+if socket.hostname() == 'soling': # laptop
+    # Ultimately the interface is probably something along the lines of
+    ptm_runs=[
+        PtmRun(run_dir="/home/rusty/src/sfb_ocean/ptm/all_sources/all_source_select_w_const")
+    ]
+    
+    grid=unstructured_grid.UnstructuredGrid.from_ugrid("/home/rusty/src/sfb_ocean/suntans/grid-merge-suisun/spliced-bathy.nc")
+    group_patt='.*_up2000',
+elif socket.hostname() == 'cws-linuxmodeling':
+    # Ultimately the interface is probably something along the lines of
+    ptm_runs=[
+        PtmRun(run_dir="/opt2/sfb_ocean/ptm/all_source/20170615/w-0.05"),
+        PtmRun(run_dir="/opt2/sfb_ocean/ptm/all_source/20170615/w-0.005"),
+        PtmRun(run_dir="/opt2/sfb_ocean/ptm/all_source/20170615/w-0.0005"),
+        PtmRun(run_dir="/opt2/sfb_ocean/ptm/all_source/20170615/w0.0"),
+        PtmRun(run_dir="/opt2/sfb_ocean/ptm/all_source/20170615/w0.0005"),
+        PtmRun(run_dir="/opt2/sfb_ocean/ptm/all_source/20170615/w0.005"),
+        PtmRun(run_dir="/opt2/sfb_ocean/ptm/all_source/20170615/w0.05"),
+    ]
+    # May not be the right grid -- would be better to copy in a grid from
+    # one of the original ptm hydro paths
+    grid=unstructured_grid.UnstructuredGrid.from_ugrid("/home/rusty/src/sfb_ocean/suntans/grid-merge-suisun/spliced-bathy.nc")
+    group_patt='.*_up5000',
+else:
+    raise Exception(f"unknown host {socket.gethostname()}")
 
+##
 
 # A 1 hour window gives 27k particles
 part_obs=query_runs(ptm_runs,
-                    group_patt='.*_up5000',
+                    group_patt=group_patt,
                     time_range=[np.datetime64("2017-07-30 00:00"),
                                 np.datetime64("2017-07-30 13:00")],
                     z_range=None, # not ready
@@ -497,7 +517,7 @@ ccoll.set_edgecolor('face')
 
 plt.colorbar(ccoll,label='Conc',ax=ax)
 
-fig.savefig('sample-output-up5000.png',dpi=120)
+fig.savefig('sample-output.png',dpi=120)
 
 # plt.setp(axs,aspect='equal')
 
