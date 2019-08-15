@@ -401,6 +401,7 @@ def query_runs(ptm_runs,group_patt,time_range,z_range=None,grid=None,
             
             part_obs=scan_group(run,group,time_range=time_range,z_range=z_range,
                                 weight=conc*run_weights[run_idx],
+                                max_age=max_age,spinup=spinup,
                                 grid=grid, extra_fields=[('run_idx',np.int32)])
             part_obs['run_idx']=run_idx
             
@@ -477,9 +478,9 @@ def add_z_bed(particles,grid):
     part_z_bed=grid.cells['z_bed'][particles['cell'].values]
     valid=particles['cell'].values>=0
     part_z_bed[~valid]=np.nan
-    hab=particles['x'].values[:,2] - part_z_bed
-
-    particles['hab']=('particle',), hab
+    # these are easy to calculate and just make the files bigger.
+    #hab=particles['x'].values[:,2] - part_z_bed
+    #particles['hab']=('particle',), hab
     particles['z_bed']=('particle',), part_z_bed
     
     return particles
@@ -515,6 +516,8 @@ class EtaExtractor(object):
         ti=np.searchsorted(self.ds.time.values,t)
         if self.ds.time.values[ti]!=t:
             print(f"Time mismatch: {self.ds.time.values[ti]} (ds) != {t} (requested)")
+        else:
+            pass # print("Time matches")
         return self.ds.Mesh2_sea_surface_elevation.isel(nMesh2_data_time=ti).values
 
 def add_z_surf(particles,grid,ptm_runs): 
@@ -525,22 +528,45 @@ def add_z_surf(particles,grid,ptm_runs):
     for t,idxs in utils.enumerate_groups(particles['obs_time'].values):
         eta=extractor.eta_for_time(t)
         z_surf[idxs]=eta[particles['cell'].values[idxs]]
+    z_surf[ particles['cell'].values<0 ] = np.nan
     particles['z_surf']=('particle',),z_surf
     return particles
 
-def add_z_info(particles,grid,ptm_runs):
+def add_z_info(particles,grid,ptm_runs=None):
     particles=add_z_bed(particles,grid)
-    particles=add_z_surf(particles,grid,ptm_runs)
+    if ptm_runs is not None:
+        particles=add_z_surf(particles,grid,ptm_runs)
     return particles
 
-def filter_by_z_range(particles,z_range,grid):
-    assert z_range[0]>=0,"Not ready for surface referenced"
-    assert z_range[1]>0.0,"Not ready for surface referenced"
-    particles=add_z_info(particles,grid)
-    hab=particles['hab'].values
+def filter_by_z_range(particles,z_range,grid,ptm_runs=None):
+    if ptm_runs is None: 
+        assert (z_range[0]>=0) and (z_range[1]>0.0), "Surface referenced requires ptm_runs"
+    particles=add_z_info(particles,grid,ptm_runs=ptm_runs)
+    z=particles['x'].values[:,2]
+    z_to_bed=z-particles.z_bed.values # should be >=0
+    if 'z_surf' in particles:
+        z_to_surf=z-particles.z_surf.values # should <=0
+
     with np.errstate(invalid='ignore'):
-        sel=np.isfinite(hab) & (hab>=z_range[0]) & (hab<z_range[1])
-    return particles.isel(particle=sel)
+        # lower bound:
+        sel=np.isfinite(z_to_bed)
+        # choice of < vs. <= is quirky, but trying
+        # to ensure that a lower bound of 0 includes the bed,
+        # and an upper bound of 0 includes the surface, while
+        # but a value used in the middle will not double count
+        # particles.  not critical with any of the existing
+        # analysis.
+        if z_range[0]>=0:
+            sel=sel&(z_to_bed>=z_range[0])
+        else:
+            sel=sel&(z_to_surf>z_range[0])
+        if z_range[1]>0:
+            sel=sel&(z_to_bed<z_range[1])
+        else:
+            sel=sel&(z_to_surf<=z_range[1])
+    result=particles.isel(particle=sel)
+    result['z_range']=('two',),z_range
+    return result
 
 def particle_to_density(particles,grid,normalize='area'):
     """
