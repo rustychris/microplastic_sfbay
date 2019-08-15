@@ -34,6 +34,19 @@ class PtmRun(object):
     def hydrodynamics_inp(self):
         return self.parse_sql(os.path.join(self.run_dir,'FISH_PTM_hydrodynamics.inp'))
 
+    def ptm_hydro_files(self):
+        """ List of the ptm_average*.nc files that are used by this run
+        """
+        path=None
+        files=[]
+        for tok in self.hydrodynamics_inp():
+            if tok[0]=='HYDRO_FILE_PATH':
+                path=tok[1]
+            elif tok[0]=='FILENAME':
+                files.append( os.path.join(path,tok[1]) )
+                path=None
+        return files
+    
     @memoize.imemoize()
     def hydro_models(self):
         hydro=self.hydrodynamics_inp()
@@ -313,6 +326,7 @@ def scan_group(self,group,time_range,z_range=None,grid=None,
 
 # POTWs that I'm not worrying about, but are still left in
 # the PTM runs.
+# for the moment, I'm ignoring the Delta, too.
 skip_source=['petaluma','sonoma_valley','ddsd','lg']
 
 def query_runs(ptm_runs,group_patt,time_range,z_range=None,grid=None,
@@ -379,8 +393,11 @@ def query_runs(ptm_runs,group_patt,time_range,z_range=None,grid=None,
             if src_name in skip_source:
                 log.info(f"Will skip source {src_name} -- it's in skip_source")
                 continue
-            groups.append(group)
             conc=conc_func(group,src_name,behavior_name)
+            if conc==0.0:
+                log.info(f"Will skip source {src_name}, behavior {behavior_name}, its concentration is 0")
+                continue
+            groups.append(group)
             
             part_obs=scan_group(run,group,time_range=time_range,z_range=z_range,
                                 weight=conc*run_weights[run_idx],
@@ -419,8 +436,9 @@ def conc_func(group,src,behavior):
     w_s_i=utils.nearest(conc_ds.w_s.values,w_s)
     
     if src in ['SacRiver','SJRiver']:
-        log.info(f"Got {src} -- returning 0.001")
-        return 0.001
+        v=0.0
+        log.info(f"Got {src} -- returning {v}")
+        return v
     else:
         source_map={'NAPA':'stormwater',
                     'COYOTE':'stormwater',
@@ -449,7 +467,7 @@ def add_cells(particles,grid,overwrite=False):
     particles['cell']=('particle',),grid.points_to_cells(particles['x'].values[:,:2])
     return particles
 
-def add_z_info(particles,grid):
+def add_z_bed(particles,grid):
     particles=add_cells(particles,grid)
 
     # assume that whoever loaded/supplied the grid has created a
@@ -464,6 +482,55 @@ def add_z_info(particles,grid):
     particles['hab']=('particle',), hab
     particles['z_bed']=('particle',), part_z_bed
     
+    return particles
+
+class EtaExtractor(object):
+    def __init__(self,ptm_runs):
+        self.hydro_fns=ptm_runs[0].ptm_hydro_files()
+        self.fn_index=-1
+        self.ds=None
+        assert len(self.hydro_fns),"Got zero hydro_fns"
+        self.open_index(0)
+    def open_next(self):
+        return self.open_index(self.fn_index+1)
+    def open_prev(self):
+        return self.open_index(self.fn_index-1)
+    def open_index(self,index):
+        if (index<0) or (index>=len(self.hydro_fns)): return False
+        if self.ds: 
+            self.ds.close()
+            self.ds=None
+        self.ds=xr.open_dataset(self.hydro_fns[index])
+        self.fn_index=index
+        # more standard name for time
+        self.ds['time']=self.ds['Mesh2_data_time']  
+        return True
+    def eta_for_time(self,t):
+        while t>self.ds.time.values[-1]:
+            if not self.open_next():
+                return None
+        while t<self.ds.time.values[0]:
+            if not self.open_prev():
+                return None
+        ti=np.searchsorted(self.ds.time.values,t)
+        if self.ds.time.values[ti]!=t:
+            print(f"Time mismatch: {self.ds.time.values[ti]} (ds) != {t} (requested)")
+        return self.ds.Mesh2_sea_surface_elevation.isel(nMesh2_data_time=ti).values
+
+def add_z_surf(particles,grid,ptm_runs): 
+    # process these in chronological order
+    add_cells(particles,grid)
+    z_surf=np.nan*np.ones(particles.dims['particle'])
+    extractor=EtaExtractor(ptm_runs)
+    for t,idxs in utils.enumerate_groups(particles['obs_time'].values):
+        eta=extractor.eta_for_time(t)
+        z_surf[idxs]=eta[particles['cell'].values[idxs]]
+    particles['z_surf']=('particle',),z_surf
+    return particles
+
+def add_z_info(particles,grid,ptm_runs):
+    particles=add_z_bed(particles,grid)
+    particles=add_z_surf(particles,grid,ptm_runs)
     return particles
 
 def filter_by_z_range(particles,z_range,grid):
