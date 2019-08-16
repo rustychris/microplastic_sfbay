@@ -28,6 +28,9 @@ import matplotlib.pyplot as plt
 # Extract the relevant flow data from the BC files.
 class PtmRun(object):
     run_dir=None
+    # in case runs are copied from one place to another
+    run_dir_mapping=[('/shared2/src/sfb_ocean/','/opt2/sfb_ocean/')]
+    
     def __init__(self,**kw):
         utils.set_keywords(self,kw)
 
@@ -41,11 +44,20 @@ class PtmRun(object):
         files=[]
         for tok in self.hydrodynamics_inp():
             if tok[0]=='HYDRO_FILE_PATH':
-                path=tok[1]
+                path=self.remap_path(tok[1])
             elif tok[0]=='FILENAME':
                 files.append( os.path.join(path,tok[1]) )
                 path=None
         return files
+
+    def remap_path(self,path):
+        for src,tgt in self.run_dir_mapping:
+            # might get fancier if the paths were weirder, but this
+            # should be good enough here.
+            if path.startswith(src):
+                log.info(f"Remapping {src} => {tgt} in {path}")
+                path=path.replace(src,tgt)
+        return path
     
     @memoize.imemoize()
     def hydro_models(self):
@@ -57,10 +69,15 @@ class PtmRun(object):
             paths.append(p)
         # Actually it's useful to load the model files to get the true model duration
         # as the BC files have extra fake data.
-
-        return [sun_driver.SuntansModel.load(p)
-                for p in paths]
-        #return [ os.path.join(p,'Estuary_BC.nc') for p in paths]
+        models=[]
+        for p in paths:
+            p=self.remap_path(p)
+            model=sun_driver.SuntansModel.load(p)
+            if model is None:
+                log.warning("Could not load model from path %s"%p)
+            else:
+                models.append(model)
+        return models
 
     def bc_ds(self):
         """ Extract the relevant parts of the BC data, return as a single dataset
@@ -147,8 +164,9 @@ class PtmRun(object):
         """
         all_bins=glob.glob(os.path.join(self.run_dir,'*_bin.out'))
         return [os.path.basename(b).replace('_bin.out','') for b in all_bins]
-
-    def group_to_src_behavior(self,group):
+    
+    @classmethod
+    def group_to_src_behavior(cls,group):
         m=re.match('(.*)_([^_]*)',group)
         return m.group(1),m.group(2)
     
