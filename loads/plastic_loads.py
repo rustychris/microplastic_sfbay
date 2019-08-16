@@ -1,7 +1,11 @@
 import os
+import six
 from stompy import utils
 import xarray as xr
 import numpy as np
+import logging
+logging.basicConfig(level=logging.INFO)
+logging.root.setLevel(logging.INFO)
 
 try:
     cwd=os.path.dirname(__file__)
@@ -12,6 +16,7 @@ utils.path(os.path.join(cwd, "../field_data"))
 
 import plastic_data
 
+six.moves.reload_module(plastic_data) # DEV
 ##
 
 # Specify what w_s values will be used for the groups in the PTM
@@ -232,7 +237,9 @@ for station in stationcodes:
 
 ##
 
-ds.to_netcdf('plastic_loads-7classes.nc')
+out_fn='plastic_loads-7classes.nc'
+os.path.exists(out_fn) and os.unlink(out_fn)
+ds.to_netcdf(out_fn)
 
 ##
 
