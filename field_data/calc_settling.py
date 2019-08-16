@@ -1,4 +1,5 @@
 import numpy as np
+import logging as log
 
 # extra handling:
 #  Fiber Bundle: dimensions are probably not great, since it's going to be very porous 
@@ -71,6 +72,9 @@ def record_to_ws(rec):
     if cat=='Fiber':
         d_equi=b/1000. # as per Rise and Fall, mm->m
         c=b
+        if np.isnan(a):
+            log.info("Fabricating fiber length of 5mm")
+            a=5.0
     else:
         if cat=='Film':
             c=0.05 # total guess
