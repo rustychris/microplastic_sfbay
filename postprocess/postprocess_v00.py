@@ -72,7 +72,9 @@ class PtmRun(object):
         models=[]
         for p in paths:
             p=self.remap_path(p)
-            model=sun_driver.SuntansModel.load(p)
+            # loading the grid can slow it down, and really only need the
+            # bc dataset.
+            model=sun_driver.SuntansModel.load(p,load_grid=False)
             if model is None:
                 log.warning("Could not load model from path %s"%p)
             else:
@@ -362,7 +364,7 @@ def query_runs(ptm_runs,group_patt,time_range,z_range=None,grid=None,
     spinup: don't return particles within this interval of the
      start of the run, defaults to max_age.
 
-    conc_func: the concentration from each group.
+    conc_func: maps group, source behavior to concentration in particles/L.
 
     run_weights: list of factors, probably should sum to 1.0,
       determines how to scale each of the runs.  defaults to average.  that's
@@ -411,7 +413,9 @@ def query_runs(ptm_runs,group_patt,time_range,z_range=None,grid=None,
             if src_name in skip_source:
                 log.info(f"Will skip source {src_name} -- it's in skip_source")
                 continue
-            conc=conc_func(group,src_name,behavior_name)
+            # here convert conc from particles/L to particles/m3.
+            # this corresponds to the switch to v03 outputs.
+            conc=1000*conc_func(group,src_name,behavior_name)
             if conc==0.0:
                 log.info(f"Will skip source {src_name}, behavior {behavior_name}, its concentration is 0")
                 continue
@@ -441,11 +445,17 @@ def query_runs(ptm_runs,group_patt,time_range,z_range=None,grid=None,
 
 ##
 
-conc_ds=xr.open_dataset("../loads/plastic_loads-7classes.nc")
+# as of -v02, there is no scaling for 100%/70% of POTWs in this
+# file, and instead that scaling is applied in conc_func
+conc_ds=xr.open_dataset("../loads/plastic_loads-7classes-v02.nc")
 # Group: UALAMEDA_up50000 UALAMEDA up50000
 
 @memoize.memoize()
 def conc_func(group,src,behavior):
+    """
+    For a release with group name group, parsed into src and
+    behavior, return the estimated concentration in particles/l.
+    """
     if behavior=='none':
         w_s=0.0
     else:
@@ -473,7 +483,13 @@ def conc_func(group,src,behavior):
                     'san_jose':'SJ'}
         source=source_map[src]
 
-    return conc_ds.conc.isel(w_s=w_s_i).sel(source=source).item()
+    c=conc_ds.conc.isel(w_s=w_s_i).sel(source=source).item()
+    # 
+    if source=='stormwater':
+        scale=1./0.33
+    else:
+        scale=1./0.70 # for wastewater
+    return scale*c
 
 def add_cells(particles,grid,overwrite=False):
     """
