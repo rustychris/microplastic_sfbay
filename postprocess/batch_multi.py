@@ -125,17 +125,18 @@ if __name__=="__main__":
                "20180115",
                "20180215",
                "20180315",
-               "20180415"
+               "20180415",
+               "20180515"
     ]
     
     log.info("Gathering list of runs")
     calls=[] # (*a,**kw) for calls to process_batch
 
-    if 0:
+    if 1:
         # the basic, 15 day setup
         for run_date in run_dates:
             ptm_runs=[post.PtmRun(run_dir=d) 
-                      for d in glob.glob(f"/opt2/sfb_ocean/ptm/all_source/{run_date}/*") ]
+                      for d in glob.glob(f"/opt2/sfb_ocean/ptm/all_source/{run_date}/w*") ]
             assert len(ptm_runs)==7
 
             # just the time period with a full field for max_age=15D
@@ -179,7 +180,6 @@ if __name__=="__main__":
                 ptm_runs=[post.PtmRun(run_dir=d) 
                           for d in run_dirs ]
 
-                # process_batch(ptm_runs,time_range,patterns,z_ranges=z_ranges)
                 for pattern in patterns:
                     # one pattern at a time
                     # will these get named okay? output goes into a folder with the
