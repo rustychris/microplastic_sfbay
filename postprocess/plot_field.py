@@ -178,6 +178,17 @@ sed_samples['part_per_mass']=sed_samples['count'] / sed_samples['Mass']
 
 ##
 
+grp=sed_samples.groupby('Group2')
+sed_groups=pd.DataFrame()
+sed_groups['part_per_mass']=grp['part_per_mass'].mean()
+# sed_groups['group2']=grp['Group2'].first()
+sed_groups['total_particles']=grp['count'].sum()
+sed_groups['total_mass']=grp['Mass'].sum()
+sed_groups['agg_part_per_mass']=sed_groups['total_particles']/sed_groups['total_mass']
+
+sed_groups.to_csv('sed_data_grouped.csv')
+
+## 
 # group by embayment?
 # do ambient need to be split out from margin?
 #  CB ambient 1.76 part/gram
@@ -191,13 +202,6 @@ sed_samples['part_per_mass']=sed_samples['count'] / sed_samples['Mass']
 # Central Bay, San Pablo Bay a bit higher than South Bay (?)
 # Suisun more or less like South Bay.
 # Tomales lower than most of those.
-
-# HERE:
-# pull x/y off a grid plot, assign to grouped samples
-# (i.e. average within group2).
-# write to csv
-# plot it up kind of like manta, but ignore
-# season - maybe just average a handful.
 
 fig=plt.figure(1)
 fig.clf()
@@ -221,3 +225,8 @@ for idx,row in sed_loc_df.iterrows():
     xy=sed_plot_locs[k]
     ax.text(row['x'],row['y'],row['code'])
 ax.plot(sed_loc_df['x'],sed_loc_df['y'],'ko')
+
+# HERE:
+# plot it up kind of like manta, but ignore
+# season - maybe just average a handful.
+
