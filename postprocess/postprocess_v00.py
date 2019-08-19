@@ -274,7 +274,7 @@ def scan_group(self,group,time_range,z_range=None,grid=None,
     # how many time steps of output fell within time_range (and
     # thus the denominator for averaging mass after the loop)
     n_steps_included=0
-    
+
     for ti in range(nsteps):
         t,parts=bf.read_timestep(ti)
         t=utils.to_dt64(t)
@@ -338,6 +338,12 @@ def scan_group(self,group,time_range,z_range=None,grid=None,
             # particles
             pass
 
+    msg=f"Run {self.run_dir}, group {group} time range {time_range} found no particles, with {n_steps_included} steps"
+    if len(ret_particles)==0:
+        log.warning(msg)
+        raise Exception(msg)
+        return None
+    
     result=np.concatenate(ret_particles)
     # averaging in time:
     result['mass'] /= n_steps_included
