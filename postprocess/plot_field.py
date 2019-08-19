@@ -186,6 +186,12 @@ sed_groups['total_particles']=grp['count'].sum()
 sed_groups['total_mass']=grp['Mass'].sum()
 sed_groups['agg_part_per_mass']=sed_groups['total_particles']/sed_groups['total_mass']
 
+sed_locs=pd.read_csv('sed_loc.csv').set_index('group2')
+
+sed_groups=pd.merge(sed_groups,sed_locs,left_index=True,right_index=True)
+
+## 
+
 sed_groups.to_csv('sed_data_grouped.csv')
 
 ## 
@@ -209,7 +215,6 @@ ax=fig.add_subplot(1,1,1)
 g.plot_cells(values=np.log10(-g.cells['z_bed'].clip(-np.inf,-0.1)),cmap='jet',ax=ax)
 ax.axis('equal')
 
-sed_loc_df=pd.read_csv('sed_loc.csv')
 
 # sed_plot_locs={
 #     'CB':[555693, 4190807],
@@ -221,10 +226,10 @@ sed_loc_df=pd.read_csv('sed_loc.csv')
 #     'LSB':[581612., 4148286.]
 # }
 
-for idx,row in sed_loc_df.iterrows():
+for idx,row in sed_locs.iterrows():
     xy=sed_plot_locs[k]
     ax.text(row['x'],row['y'],row['code'])
-ax.plot(sed_loc_df['x'],sed_loc_df['y'],'ko')
+ax.plot(sed_locs['x'],sed_locs['y'],'ko')
 
 # HERE:
 # plot it up kind of like manta, but ignore
