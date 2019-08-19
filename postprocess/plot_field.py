@@ -64,6 +64,7 @@ for v in manta_per_sample.index.values:
         non_dupe=v.replace('-DUP','')
         assert non_dupe in manta_per_sample.index.values
         manta_per_sample.loc[non_dupe,'count'] += manta_per_sample.loc[v,'count']
+        manta_per_sample.loc[non_dupe,'count_preblank'] += manta_per_sample.loc[v,'count_preblank']
         manta_per_sample.loc[non_dupe,'volume_l'] += manta_per_sample.loc[v,'volume_l']
         to_delete.append(v)
 manta_per_sample.drop(to_delete,inplace=True)
@@ -142,3 +143,81 @@ fig.savefig('manta-blank_sub-particle_counts.png',dpi=150)
 
 ##
 
+# And the sediment data:
+sed=plastic_data.sediment_df
+
+# There is a Mass column, which appears to be the mass of sediment analyzed per SampleID.
+#
+# StationCode:
+#array(['CB10', 'CB15', 'CB32', 'CB37', 'LSB02', 'LSB04', 'LSB06', 'SB051',
+#       'SB056', 'SB074', 'SOSL16', 'SOSL40', 'SPB128', 'SPB15', 'SUB52',
+#       'SUB53', 'TB101', 'TB102', 'LABQA', 'CB001S', 'SB002S'],
+
+# presumably CB: Central Bay
+#            LSB: Lower South Bay
+#            SB: South Bay
+#            SOSL: Southern Sloughs called out as Margins - Stormwater and Wastewater
+#            SPB: San Pablo Bay
+#            SUB: Suisun Bay (called out in Group1b as Margin - Wastewater)
+#            TB: Tomales Bay
+# Group1 includes Ambient, Margins, Reference.
+# SOSL falls under Group1B "Margin - Stormwater and Wastewater"
+
+# Overall, I think Group2 is the way to go.
+
+# regardless, have to process them by SampleID first
+grp=sed.groupby('SampleID')
+
+sed_samples=pd.DataFrame()
+
+sed_samples['count']=grp.size()
+for fld in ['Mass','StationCode','Group1','Group1b','Group2']:
+    sed_samples[fld]=grp[fld].first()
+    
+sed_samples['part_per_mass']=sed_samples['count'] / sed_samples['Mass']
+
+##
+
+# group by embayment?
+# do ambient need to be split out from margin?
+#  CB ambient 1.76 part/gram
+#  SB ambient 2.70 part/gram
+# CB margins: more like 3.8
+# SB margins: 0.8 to 2.6
+
+# overall, the story from the data looks like:
+#   Southern Sloughs and LSB have the highest part/g.
+# South Bay is not that high
+# Central Bay, San Pablo Bay a bit higher than South Bay (?)
+# Suisun more or less like South Bay.
+# Tomales lower than most of those.
+
+# HERE:
+# pull x/y off a grid plot, assign to grouped samples
+# (i.e. average within group2).
+# write to csv
+# plot it up kind of like manta, but ignore
+# season - maybe just average a handful.
+
+fig=plt.figure(1)
+fig.clf()
+ax=fig.add_subplot(1,1,1)
+g.plot_cells(values=np.log10(-g.cells['z_bed'].clip(-np.inf,-0.1)),cmap='jet',ax=ax)
+ax.axis('equal')
+
+sed_loc_df=pd.read_csv('sed_loc.csv')
+
+# sed_plot_locs={
+#     'CB':[555693, 4190807],
+#     'SPB':[553500, 4213639],
+#     'SB':[564992, 4166840],
+#     'SOSL':[587722, 4144760], # FICTION!
+#     'SUB':[583062, 4216210],
+#     'TB':[509000., 4223913.],
+#     'LSB':[581612., 4148286.]
+# }
+
+for idx,row in sed_loc_df.iterrows():
+    xy=sed_plot_locs[k]
+    ax.text(row['x'],row['y'],row['code'])
+ax.plot(sed_loc_df['x'],sed_loc_df['y'],'ko')
