@@ -19,7 +19,7 @@ if 0:
     storm_df['pathway']='stormwater'
     dfs=[effluent_df,storm_df]
 else:
-    xlsx_fn=os.path.join(cwd,'2019-08-14_DataExport_ForRH.xlsx')
+    xlsx_fn=os.path.join(cwd,'2019-08-19_DataExport_ForRH.xlsx')
     # also Manta, Sediment, Fish
 
     # code needs Category_Final {Fiber, Film, Fiber Bundle, Fragment, Sphere, Foam
@@ -27,8 +27,8 @@ else:
     # PlasticType_Final -- rename.
     # Length.mm, Width.mm - these are fine.
     def load_sheet(sheet_name):
-        csv_fn=xlsx_fn.replace('.xlsx','')+sheet_name+".csv"
-        if utils.is_stale(csv_fn,[xlsx_fn]):
+        csv_fn=os.path.join(cwd,sheet_name+".csv")
+        if utils.is_stale(csv_fn,[xlsx_fn,__file__]):
             log.info("Reading from xlsx")
             df=pd.read_excel(xlsx_fn,sheet_name=sheet_name)
             df.to_csv(csv_fn)

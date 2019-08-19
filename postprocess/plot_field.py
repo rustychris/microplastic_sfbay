@@ -43,7 +43,8 @@ print("Stations missing lat/lon in manta: %s"%
 grp=manta.groupby('SampleID')
 
 manta_per_sample=pd.DataFrame()
-manta_per_sample['volume_l']=grp['Volume'].first()
+manta_per_sample['volume_l']=grp['Volume'].first() 
+manta_per_sample['area_m2']=1e6*grp['Area'].first() # comes in km^2
 
 manta_per_sample['count_preblank'] = grp.size()
 
@@ -54,6 +55,7 @@ for fld in ['lat','lon','SampleDate','Season','SampleType']:
 median_blank_count=manta_per_sample['count_preblank'][ manta_per_sample['SampleType']=='FieldBlank' ].median()
 
 manta_per_sample['count']=np.maximum(0, (manta_per_sample['count_preblank'] - median_blank_count).values )
+
 ##
 
 # Combine DUP
@@ -66,11 +68,13 @@ for v in manta_per_sample.index.values:
         manta_per_sample.loc[non_dupe,'count'] += manta_per_sample.loc[v,'count']
         manta_per_sample.loc[non_dupe,'count_preblank'] += manta_per_sample.loc[v,'count_preblank']
         manta_per_sample.loc[non_dupe,'volume_l'] += manta_per_sample.loc[v,'volume_l']
+        manta_per_sample.loc[non_dupe,'area_m2'] += manta_per_sample.loc[v,'area_m2']
         to_delete.append(v)
 manta_per_sample.drop(to_delete,inplace=True)
 
 ##
 manta_per_sample['part_per_m3']= 1000*manta_per_sample['count'] / manta_per_sample['volume_l']
+manta_per_sample['part_per_m2']= manta_per_sample['count'] / manta_per_sample['area_m2']
 
 ll=manta_per_sample.loc[: , ['lon','lat']].values
 xy=np.nan*np.ones( (len(manta_per_sample),2) )
@@ -85,7 +89,14 @@ manta_per_sample.to_csv('manta_summary.csv')
 
 ##
 
+plt.figure(1).clf()
+plt.plot( manta_per_sample.part_per_m3,
+          manta_per_sample.part_per_m2,
+          'g.')
+plt.xlabel('per m$^3$')
+plt.ylabel('per m$^2$')
 
+##
 from matplotlib import colors
 
 fig=plt.figure(1)
@@ -173,7 +184,9 @@ sed_samples=pd.DataFrame()
 sed_samples['count']=grp.size()
 for fld in ['Mass','StationCode','Group1','Group1b','Group2']:
     sed_samples[fld]=grp[fld].first()
-    
+
+sed_samples['lat']=grp['ActualLatitude'].first()
+sed_samples['lon']=grp['ActualLongitude'].first()
 sed_samples['part_per_mass']=sed_samples['count'] / sed_samples['Mass']
 
 ##
@@ -212,26 +225,27 @@ sed_groups.to_csv('sed_data_grouped.csv')
 fig=plt.figure(1)
 fig.clf()
 ax=fig.add_subplot(1,1,1)
-g.plot_cells(values=np.log10(-g.cells['z_bed'].clip(-np.inf,-0.1)),cmap='jet',ax=ax)
+g.plot_cells(values=np.log10(-g.cells['z_bed'].clip(-np.inf,-0.1)),cmap='jet',ax=ax,
+             alpha=0.2)
 ax.axis('equal')
-
-
-# sed_plot_locs={
-#     'CB':[555693, 4190807],
-#     'SPB':[553500, 4213639],
-#     'SB':[564992, 4166840],
-#     'SOSL':[587722, 4144760], # FICTION!
-#     'SUB':[583062, 4216210],
-#     'TB':[509000., 4223913.],
-#     'LSB':[581612., 4148286.]
-# }
 
 for idx,row in sed_locs.iterrows():
     xy=sed_plot_locs[k]
     ax.text(row['x'],row['y'],row['code'])
 ax.plot(sed_locs['x'],sed_locs['y'],'ko')
 
-# HERE:
-# plot it up kind of like manta, but ignore
-# season - maybe just average a handful.
+ll=np.c_[sed_samples['lon'],
+         sed_samples['lat']]
+xy=proj_utils.mapper('WGS84','EPSG:26910')(ll)
+sed_samples['x']=xy[:,0]
+sed_samples['y']=xy[:,1]
 
+for idx,s in sed_samples.iterrows():
+    ll=[s['lon'],s['lat']]
+    if not np.isfinite(ll[0]):
+        print(f"Sample {idx} has no lat/lon")
+        continue
+    xy=ll2utm(ll)
+    ax.text(xy[0],xy[1],f"{s['Group2']}: {idx}",fontsize=10)
+    
+ax.plot(sed_samples['x'],sed_samples['y'],'go',ms=4)
