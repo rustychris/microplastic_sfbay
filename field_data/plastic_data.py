@@ -75,6 +75,11 @@ else:
                                                 
         df['pathway']=[matrix_to_pathway[m] for m in df['MatrixID'].values]
 
+        if ('SampleDate' in df) and np.issubdtype(df['SampleDate'].dtype,np.integer):
+            # convert to proper dates:
+            as_date=np.datetime64("2017-08-21") + (df['SampleDate']-42968)*np.timedelta64(1,'D')
+            df['SampleDate']=as_date
+
 log.info("calculating settling velocities")        
 for df in dfs:
     w_s=[calc_settling.record_to_ws(row)
