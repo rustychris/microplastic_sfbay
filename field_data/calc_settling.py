@@ -31,16 +31,30 @@ density["Polyacrylamide"]=1.30 # https://polymerdatabase.com/polymers/polyacryla
 density["Polyester"]=1.39 # https://nptel.ac.in/courses/116102026/36
 density["Polyamide"]=1.14 # https://www.azom.com/article.aspx?ArticleID=477
 density["Wool"]=1.29 # https://www.researchgate.net/publication/47929535_Measurement_of_density_and_medullation_in_wool
-
 density["Paint"]=1.4 # is this alkyd binder? https://pubs.acs.org/doi/pdf/10.1021/es501757s
 # paints were mostly fragments.
+
+density["Methyl vinyl ether copolymers"]=1.05 # http://polymerdatabase.com/polymers/polymethylvinylether.html
 
 density["Polyurethane"]=1.1 # as a foam, or solid?  some of both. https://en.wikipedia.org/wiki/Polyurethane
 # density depends on details of production, but 1.1 is a reasonable central value.
 
+density["Acrylonitrile butadiene styrene"]=1.07 # https://en.wikipedia.org/wiki/Acrylonitrile_butadiene_styrene#cite_note-MATBASE-1
+
+# 0.94 vs 0.90 for polyethylene and polypropylene, so split the difference
+density["Polyethylene/polypropylene copolymer"]=0.92
+
 # density["Anthropogenic (unknown base)"]=X # primarily fibers
-density["Anthropogenic (synthetic)"]=0.5 # primarily foams.
+# density["Anthropogenic (synthetic)"]=0.5 # primarily foams.
 # density["Inorganic natural material"]=X
+
+density["Polyethylene co-acrylic acid"]=0.96 # https://www.sigmaaldrich.com/catalog/product/aldrich/181048?lang=en&region=US
+density["Polytetrafluoroethylene"]=2.2 # https://en.wikipedia.org/wiki/Polytetrafluoroethylene
+
+density["Polyvinyl acetate"]=1.19 # https://en.wikipedia.org/wiki/Polyvinyl_acetate
+
+density['Phenolic resin']=1.3 # https://www.sciencedirect.com/topics/chemical-engineering/phenolic-resins
+
 
 # dev:
 # mean_fiber_width=combined[ combined['Category_Final']=='Fiber']['Width.mm'].mean()
