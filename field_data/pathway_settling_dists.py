@@ -39,26 +39,23 @@ for cat_i,(df,cat) in enumerate([ (storm_df,'Stormwater') ,
     ax.axis(xmin=all_bins_mapped[0],xmax=all_bins_mapped[-1])
     
     plt.setp(ax.yaxis.get_ticklabels(),visible=0)
-    ax.set_ylabel('Distribution')
+    ax.set_ylabel('Abundance')
 
     xticks=[common.map_bilog(x)
             for x in [-0.05,-0.005,
-                      # 0.0,
+                      0.0,
                       0.005,0.05]]
     ax.set_xticks(xticks)
     labels=[common.mapped_label(y) for y in ax.get_xticks()]
     ax.set_xticklabels(labels)
     ax.set_yticks([])
-    ax.set_xlabel('Rising/Sinking Velocity (m/s)')
+    if cat_i==1:
+        ax.set_xlabel('Rising/Sinking Velocity (m/s)')
     ax.axvline(0,color='k',lw=0.8,dashes=[8,16])
 
-txtargs=dict(style='italic',fontweight='bold',fontsize=12)
-axs[1].text(0.0,-0.06,"Floats",transform=ax.transAxes,va='top',ha='left',**txtargs)
-axs[1].text(1,-0.06,"Sinks",transform=ax.transAxes,va='top',ha='right',**txtargs)
-axs[1].text(0.5,-0.06,"Passive",transform=ax.transAxes,va='top',ha='center',**txtargs)
-nticks=len(axs[1].get_xticklabels())
-
-axs[0].xaxis.set_visible(0)
+six.moves.reload_module(common)
+common.set_bold_labels(axs[1])    
+plt.setp(axs[0].get_xticklabels(),visible=0)
 
 for ax in axs:
     ax.spines['top'].set_visible(0)

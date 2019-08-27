@@ -24,16 +24,16 @@ The major to-dos:
     I was showing the old table of densities.  Done.
  2. Remake the density plots, distributions, etc., now accounting for both the new
     harmonization and the fractional weights.
-      HERE
-        - re-draw the pathway plot to account for updates in density.
-        - update the plastic type plot to account for only proper samples as in the
+        - DONE re-draw the pathway plot to account for updates in density.
+        - DONE update the plastic type plot to account for only proper samples as in the
           pathway plot.
-        - update the numbers to reflect also valid field samples only (the numbers of
+        - DONE update the numbers to reflect also valid field samples only (the numbers of
           total particles, and how many got a w_s).
-        - same update for the morphology plot.
+        - DONE same update for the morphology plot.
         
- 3. Reconsider blanks in stormwater and wastewater.  Treat blank counts per morphology,
-    and de-rate / weight each particle based on the respective blanks.
+ 3. Reconsider blanks in stormwater and wastewater for the purposes of setting loads.
+    Treat blank counts per morphology, and de-rate / weight each particle based on the
+    respective blanks.
  4. Regenerate source densities, in a w/fiber and w/o fiber scenario.
  5. Run ptm postprocessing again.
  6. Adjust plots to show w/ and w/o fibers for manta, and to use blank-de-rated

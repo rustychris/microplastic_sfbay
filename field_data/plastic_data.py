@@ -9,6 +9,7 @@ import numpy as np
 try:
     cwd=os.path.dirname(__file__)
 except NameError:
+    __file__='plastic_data.py'
     cwd="." # assume interactive run is from this directory.
 
 if 0:
@@ -28,7 +29,7 @@ else:
     # Length.mm, Width.mm - these are fine.
     def load_sheet(sheet_name):
         csv_fn=os.path.join(cwd,sheet_name+".csv")
-        if utils.is_stale(csv_fn,[xlsx_fn,__file__]):
+        if utils.is_stale(csv_fn,[xlsx_fn]):
             log.info("Reading from xlsx")
             df=pd.read_excel(xlsx_fn,sheet_name=sheet_name)
             df.to_csv(csv_fn)
@@ -87,5 +88,58 @@ for df in dfs:
     w_s=np.array(w_s)
     df['w_s']=w_s
 
+## 
+# Note blanks and samples that should be ignored.
+
+# standardize some flags across all dataframes.
+
+effluent_df['field_sample_p']= effluent_df['SampleTypeCode']=='Field'
+
+# Select real and dupe samples, no blanks.
+storm_df['field_sample_p']= ( (storm_df['SampleType_AW']=='Field')
+                              | (storm_df['SampleType_AW']=='FieldDupe') )
+
+manta_df['field_sample_p']=manta_df['SampleType']=='Trawl'
+
+sediment_df['field_sample_p']=sediment_df['SampleType']=='FieldSample'
+# There are 57 entries that have SampleType==Field, but StationType_Final=LABQA
+# assume those are not to be used.
+fish_df['field_sample_p']=( (fish_df['SampleType']=='Field')
+                            & (fish_df['StationType_Final']=='Field') )
+
+## 
+    
 combined=pd.concat(dfs,sort=False)
+
+##
+
+# for browsing:
+if 0:
+    df=fish_df
+    for col in df.columns:
+        uniq=df[col].unique()
+        print(f"{col:20}:{len(uniq):3}: {', '.join([str(s) for s in uniq])[:100]}")
+
+##
+
+# print some totals
+valid_storm_effluent=combined['pathway'].isin(['stormwater','effluent']) & combined['field_sample_p']
+print(f"Total particles counted in stormwater and effluent field samples (non-blanks): {valid_storm_effluent.sum()}")
+valid_with_w_s=valid_storm_effluent & (~combined['w_s'].isnull())
+print(f"    ... with w_s: {valid_with_w_s.sum()}")
+
+# Still:
+#   should I create a second combined_nf that omits all fibers?
+#    and in that case, the one with fibers maybe should omit manta stations that didn't count
+#    fibers?
+
+# where should the derating by blanks go?
+# figure it out for stormwater and effluent here, then later circle back to deal with the
+# manta fiber/no fiber question.
+
+
+# fibers vs. non-fibers matters when trying to compare with manta, at which point only some
+# samples can be used when including fibers.
+
+
 

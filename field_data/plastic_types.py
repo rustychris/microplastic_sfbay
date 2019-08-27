@@ -38,14 +38,9 @@ from plastic_data import effluent_df,storm_df,combined
 ##
 
 # Select real and dupe samples, no blanks
-valid_storm=(combined['pathway']=='stormwater')&(
-    (combined['SampleType_AW']=='Field')
-    | (combined['SampleType_AW']=='FieldDupe') )
 
-valid_eff=(combined['pathway']=='effluent')&(
-    combined['SampleTypeCode']=='Field')
+valid=combined[ combined['pathway'].isin(['stormwater','effluent']) & combined['field_sample_p'] ].copy()
 
-valid=combined[ valid_storm|valid_eff ].copy()
 ##
 
 types=valid.groupby(['pathway','PlasticType_Final'])['pathway'].count()

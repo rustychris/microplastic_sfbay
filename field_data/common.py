@@ -18,3 +18,18 @@ def mapped_label(y):
     else:
         s=sf.format_data(unmap_bilog(y))
     return "$"+s+"$"
+
+
+def set_bold_labels(ax,y=-0.06):
+    """
+    Common styling for x axis in bi-log plots.
+    Puts a bold 'Sinks', 'Passive', 'Floats'
+    on the xaxis, and hides the middle tick label
+    """
+    txtargs=dict(style='italic',fontweight='bold',fontsize=12)
+    ax.text(0.0,y,"Floats",transform=ax.transAxes,va='top',ha='left',**txtargs)
+    ax.text(1,y,"Sinks",transform=ax.transAxes,va='top',ha='right',**txtargs)
+    ax.text(0.5,y,"Passive",transform=ax.transAxes,va='top',ha='center',**txtargs)
+    nticks=len(ax.get_xticklabels())
+    ax.get_xticklabels()[nticks//2].set_visible(0)
+    #ax.xaxis.set_visible(0)

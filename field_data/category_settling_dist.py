@@ -12,8 +12,8 @@ import numpy as np
 from matplotlib import gridspec
 gs=gridspec.GridSpec(3,1)
 
-plt.close(1)
-fig=plt.figure(1)
+#plt.close(1)
+fig=plt.figure(3)
 fig.set_size_inches([8.4,4.8],forward=True)
 fig.clf()
 
@@ -23,9 +23,11 @@ from common import map_bilog, unmap_bilog, mapped_label, default_small
 small=default_small
 
 bins=10**np.linspace(np.log10(small),-0.5,50)
-w_s=combined['w_s']
-w_s_val=w_s[np.isfinite(w_s)]
+sel=combined['pathway'].isin(['effluent','stormwater']) & combined['field_sample_p']
+valid=combined[sel]
 
+w_s=valid['w_s']
+w_s_val=w_s[np.isfinite(w_s)]
     
 w_s_mapped=map_bilog(w_s_val)
 all_bins=np.r_[ -bins[::-1], bins ]
@@ -44,23 +46,20 @@ ax.set_xticks(xticks)
 
 labels=[mapped_label(y) for y in ax.get_xticks()]
 ax.set_xticklabels(labels)
-ax.set_xlabel('Velocity (m/s)')
+ax.set_xlabel('Sinking/Rising Velocity (m/s)')
 plt.setp(ax.get_yticklabels(),visible=0)
 ax.axvline(0,ls='--',color='k',lw=0.5,zorder=-2)
-
-ax.text(0.0,-0.1,"$Floats$",transform=ax.transAxes,va='top',ha='left')
-ax.text(1,-0.1,"$Sinks$",transform=ax.transAxes,va='top',ha='right')
 
 ax_typ=fig.add_subplot(gs[:-1,:],sharex=ax)
 plt.setp(ax_typ.get_xticklabels(),visible=0)
 
 # not actually types, but categories
-types=combined.groupby('Category_Final')['pathway'].count()
-types=types.sort_values(ascending=False)
+cats=combined.groupby('Category_Final').size()
+cats=cats.sort_values(ascending=False)
 
 labels=[]
 w_s=[]
-for idx,typ in enumerate(types.index):
+for idx,typ in enumerate(cats.index):
     print(typ)
     subgroup=combined.iloc[ (combined.Category_Final==typ).values, :]
     sub_w_s=subgroup['w_s'].values
@@ -80,9 +79,12 @@ cyc=plt.rcParams['axes.prop_cycle']
 for box,sty in zip(boxes['boxes'],cyc):
     box.set_facecolor(sty['color'])
 
-    
+common.set_bold_labels(ax,y=-0.12)
+
 plt.setp(ax_typ.spines.values(),visible=0)
 ax_typ.xaxis.set_visible(0)
+
+##
 
 fig.savefig('category_settling_dist.png',dpi=150)
 
