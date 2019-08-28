@@ -19,12 +19,20 @@ import plastic_data
 six.moves.reload_module(plastic_data) # DEV
 ##
 
+#version='v03-nofiber'
+version='v03'
+
+## 
+
+def maybe_remove_fiber(df):
+    if 'nofiber' in version:
+        slim=df[ df['Category_Final']!='Fiber' ]
+        print(f"Removing fibers: {len(df)} => {len(slim)} particles")
+        return slim
+    else:
+        return df
+
 # Specify what w_s values will be used for the groups in the PTM
-
-# w_s_centers=[0.06,0.02,0.006,0.002,0.0006,
-#              0,
-#              -0.06,-0.02,-0.006,-0.002,-0.0006]
-
 w_s_centers=np.array([0.05,0.005,0.0005,
                       0,
                       -0.05,-0.005,-0.0005])
@@ -53,7 +61,7 @@ ds['conc_raw']=('w_s','source'),np.nan*np.ones( (ds.dims['w_s'],ds.dims['source'
 
 
 ## 
-df=plastic_data.storm_df
+df=maybe_remove_fiber(plastic_data.storm_df)
 
 
 # Goal is to come up with a table of
@@ -188,7 +196,7 @@ ds['conc_raw'].sel(source='stormwater').values[:]= bin_conc_raw
 ##
 
 # And wastewater:
-df=plastic_data.effluent_df
+df=maybe_remove_fiber(plastic_data.effluent_df)
 
 # StationCode: 'CCCSD', 'EBDA', 'EBMUD', 'FSSD', 'LABQA', 'PA', 'SFPUC', 'SJ', 'SUNN'
 # SampleID: includes date, station and sieve size.
@@ -325,12 +333,14 @@ for station in stationcodes:
 
     # Adjustment factor for how many samples have w_s vs total counted
     adjust=total_count / w_s_count
+    assert sample_volume_l>0.0
     for bin_idx,particles in utils.enumerate_groups(bins):
         bin_conc_raw[bin_idx] = len(particles) * adjust/sample_volume_l
         bin_conc[bin_idx]=field_station['derated'].values[field_valid][particles].sum() * adjust/sample_volume_l 
 
     ds.conc_raw.sel(source=station).values[:] = bin_conc_raw
-    
+    ds.conc.sel(source=station).values[:] = bin_conc
+    assert np.all(np.isfinite(bin_conc))
 
 # StationCode: 'CCCSD', 'EBDA', 'EBMUD', 'FSSD', 'LABQA', 'PA', 'SFPUC', 'SJ', 'SUNN'
 
@@ -342,7 +352,7 @@ print(str(df_out))
 
 ##
 
-out_fn='plastic_loads-7classes-v03.nc'
+out_fn=f'plastic_loads-7classes-{version}.nc'
 os.path.exists(out_fn) and os.unlink(out_fn)
 ds.to_netcdf(out_fn)
 
