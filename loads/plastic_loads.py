@@ -49,6 +49,7 @@ ds['source']=('source',), ['stormwater',
                            'SUNN' ]
 
 ds['conc']=('w_s','source'),np.nan*np.ones( (ds.dims['w_s'],ds.dims['source']), np.float64)
+ds['conc_raw']=('w_s','source'),np.nan*np.ones( (ds.dims['w_s'],ds.dims['source']), np.float64)
 
 
 ## 
@@ -84,57 +85,105 @@ sample_volume_l={
 # 1317 l
 total_sample_volume_l=np.sum( list(sample_volume_l.values()))
 
-sel=((df['SampleGross_AW']=='Field') & (np.isfinite(df['w_s']))).values
+# sel=(df['field_sample_p'] & np.isfinite(df['w_s'])).values
+# had been limiting this to particles with w_s, but that was too early
+field=df[df['field_sample_p']].copy()
 
-# 1088 left, out of 12,525 original.
+# 1072 left, out of 12,525 original.
+##
+
+# Adjust particle weights by blanks.
+storm_blank_types=['FIELDQA','LABQA']
+
+blanks=df[ (df['SampleID']!='Bottle Blank') & df['SampleType_AW'].isin(storm_blank_types) ].copy() # only use field blanks
+
+n_blank_samples=len(blanks['SampleID'].unique())
+n_field_samples=len(field['SampleID'].unique())
+
+print("--- Stormwater Blanks ---")
+if 'LABQA' in storm_blank_types:
+    print(f"  Considering Field & Lab Blanks, {n_blank_samples:3} distinct blank samples")
+else:
+    # 2
+    print(f"  Considering Field Blanks only, {n_blank_samples:3} distinct blank samples")
+    
+# 15
+print(f"                                 {n_field_samples:3} distinct field samples")
+
+# Assume that each sample accumulates the same counts of erroneous particles.
+blank_category_per_sample=blanks.groupby('Category_Final').size() / n_blank_samples
+print("Per-blank sample, per-category counts")
+print(blank_category_per_sample)
+print()
+
+# All particles start with weight of 1.0
+field['derated']=1.0
+
+for cat,blank_freq in blank_category_per_sample.iteritems():
+    print(f"Stormwater, category={cat}.  Per-blank count {blank_freq}")
+    cat_sel=field['Category_Final']==cat    
+    n_field_per_cat=cat_sel.sum()
+    print(f"    field count over {n_field_samples:3} samples: {n_field_per_cat}, {n_field_per_cat/n_field_samples:.2f} per sample")
+    real_derate=(n_field_per_cat - n_field_samples*blank_freq) / n_field_per_cat
+    derate=max(0.0,real_derate)
+    print(f"    de-rating: {derate:.3f} ({real_derate:.3f})")
+    print()
+    
+    field.loc[ cat_sel, 'derated']=derate
+##
 
 # simplest approach:
 #   Assume that all stations are sampling the same water (i.e. a single distibution
 #   over all sites).  Then it doesn't matter at which station a particle was counted.
 
 bin_conc=np.zeros(len(w_s_centers),np.float64)
-bin_choice=utils.nearest(w_s_centers,df.iloc[sel,:]['w_s'].values)
-
-for bin_idx,particles in utils.enumerate_groups(bin_choice):
-    bin_conc[bin_idx] = len(particles) / total_sample_volume_l
-
-##
-
-# That only accounts for the particles that had enough information to get a w_s.
-# From the chapter, what do we know about particles getting counted vs. particles
-# having enough info to get w_s?
+bin_conc_raw=np.zeros(len(w_s_centers),np.float64)
+# field includes w/ and w/o w_s here --
+field_valid=np.isfinite(field['w_s'].values)
+# but bin_choice now reflects just the field samples with a w_s
+bin_choice=utils.nearest(w_s_centers,field['w_s'].values[field_valid])
 
 # how many non-QA samples?  Both StationCode='LABQA' and 'FIELDQA' have
 # SampleGross_AW='QA'.
 # => 12362
-total_non_qa_particles= (df['SampleGross_AW']=='Field').sum()
+fraction_with_w_s = field_valid.sum() / len(field)
 
-fraction_with_w_s=sel.sum() / total_non_qa_particles
+for bin_idx,particles in utils.enumerate_groups(bin_choice):
+    # Here the particles are de-rated based on the per-category blank counts
+    # Lots going on here:
+    #                   the derated particle 'weight' for *all* particles
+    #                                           just the ones with w_s
+    #                                                       of those, just this bin of w_s
+    #                                                                           to a concentration
+    #                                                                                                   scale up to account for
+    #                                                                                                   how many particles don't have w_s
+    bin_conc[bin_idx] = field['derated'].values[field_valid][particles].sum() / total_sample_volume_l / fraction_with_w_s
+    # But do the non-de-rated calc as well:
+    bin_conc_raw[bin_idx] = len(particles) / total_sample_volume_l / fraction_with_w_s
 
 # So adjust the bin concentrations to reflect the total number of particles
-adj_bin_conc = bin_conc/fraction_with_w_s
 
-for w_s, conc in zip(w_s_centers,adj_bin_conc):
-    print(f" w_s ~ {w_s: .5f}m/s    conc ~ {conc:.3f} particles/l")
-print(f"  Total                      {adj_bin_conc.sum():.3f} particles/l")
+for w_s, conc, conc_raw in zip(w_s_centers,bin_conc,bin_conc_raw):
+    print(f" w_s ~ {w_s: .5f}m/s    conc ~ {conc:.3f} particles/l, raw ~ {conc_raw:.3f}")
+print(f"  Total                      {bin_conc.sum():.3f} particles/l, raw ~ {bin_conc_raw.sum():.3f}")
 
 ##
 
 # fill in the dataset
-ds['conc'].sel(source='stormwater').values[:]= adj_bin_conc
-
+ds['conc'].sel(source='stormwater').values[:]= bin_conc
+ds['conc_raw'].sel(source='stormwater').values[:]= bin_conc_raw
 
 ##
 # Output:
-# 
-#  w_s ~ -0.05000m/s    conc ~ 0.250 particles/l
-#  w_s ~ -0.00500m/s    conc ~ 0.552 particles/l
-#  w_s ~ -0.00050m/s    conc ~ 0.707 particles/l
-#  w_s ~  0.00000m/s    conc ~ 0.017 particles/l
-#  w_s ~  0.00050m/s    conc ~ 1.147 particles/l
-#  w_s ~  0.00500m/s    conc ~ 6.160 particles/l
-#  w_s ~  0.05000m/s    conc ~ 0.552 particles/l
-#   Total                      9.386 particles/l
+#
+#  w_s ~ -0.05000m/s    conc ~ 0.245 particles/l, raw ~ 0.245
+#  w_s ~ -0.00500m/s    conc ~ 0.514 particles/l, raw ~ 0.517
+#  w_s ~ -0.00050m/s    conc ~ 0.543 particles/l, raw ~ 0.569
+#  w_s ~  0.00000m/s    conc ~ 0.016 particles/l, raw ~ 0.018
+#  w_s ~  0.00050m/s    conc ~ 1.097 particles/l, raw ~ 1.217
+#  w_s ~  0.00500m/s    conc ~ 6.195 particles/l, raw ~ 6.252
+#  w_s ~  0.05000m/s    conc ~ 0.568 particles/l, raw ~ 0.569
+#   Total                      9.179 particles/l, raw ~ 9.386
 
 ##
 

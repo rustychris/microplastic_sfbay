@@ -33,3 +33,8 @@ def set_bold_labels(ax,y=-0.06):
     nticks=len(ax.get_xticklabels())
     ax.get_xticklabels()[nticks//2].set_visible(0)
     #ax.xaxis.set_visible(0)
+
+def summarize(df):
+    for col in df.columns:
+        uniq=df[col].unique()
+        print(f"{col:20}:{len(uniq):3}: {', '.join([str(s) for s in uniq])[:100]}")
