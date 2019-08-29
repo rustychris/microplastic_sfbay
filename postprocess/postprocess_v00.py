@@ -453,49 +453,60 @@ def query_runs(ptm_runs,group_patt,time_range,z_range=None,grid=None,
 
 # as of -v02, there is no scaling for 100%/70% of POTWs in this
 # file, and instead that scaling is applied in conc_func
-conc_ds=xr.open_dataset("../loads/plastic_loads-7classes-v02.nc")
+# as of -v03, this file includes derating for blank contamination
+# for stormwater and for WWTP.
+#conc_ds=xr.open_dataset("../loads/plastic_loads-7classes-v03.nc")
+
 # Group: UALAMEDA_up50000 UALAMEDA up50000
-
-@memoize.memoize()
-def conc_func(group,src,behavior):
+default_conc_fn="../loads/plastic_loads-7classes-v03.nc"
+def conc_func_full(conc_fn=default_conc_fn):
     """
-    For a release with group name group, parsed into src and
-    behavior, return the estimated concentration in particles/l.
+    Given the path to a netcdf file with concentration data, return a
+    function that maps group,src,behavior to a concentration
     """
-    if behavior=='none':
-        w_s=0.0
-    else:
-        w_s=float(behavior.replace('up','-').replace('down',''))/1e6
-
-    # for laptop
-    w_s_i=utils.nearest(conc_ds.w_s.values,w_s)
+    conc_ds=xr.open_dataset(conc_fn)
     
-    if src in ['SacRiver','SJRiver']:
-        v=0.0
-        log.info(f"Got {src} -- returning {v}")
-        return v
-    else:
-        source_map={'NAPA':'stormwater',
-                    'COYOTE':'stormwater',
-                    'SCLARAVCc':'stormwater',
-                    'UALAMEDA':'stormwater',
-                    'cccsd':'CCCSD',
-                    'src000':'EBDA',
-                    'src001':'EBMUD',
-                    'sunnyvale':'SUNN',
-                    'fs':'FSSD',
-                    'palo_alto':'PA',
-                    'src002':'SFPUC',
-                    'san_jose':'SJ'}
-        source=source_map[src]
+    @memoize.memoize()
+    def conc_func(group,src,behavior,conc_ds=conc_ds):
+        """
+        For a release with group name group, parsed into src and
+        behavior, return the estimated concentration in particles/l.
+        """
+        if behavior=='none':
+            w_s=0.0
+        else:
+            w_s=float(behavior.replace('up','-').replace('down',''))/1e6
 
-    c=conc_ds.conc.isel(w_s=w_s_i).sel(source=source).item()
-    # 
-    if source=='stormwater':
-        scale=1./0.33
-    else:
-        scale=1./0.70 # for wastewater
-    return scale*c
+        # for laptop
+        w_s_i=utils.nearest(conc_ds.w_s.values,w_s)
+
+        if src in ['SacRiver','SJRiver']:
+            v=0.0
+            log.info(f"Got {src} -- returning {v}")
+            return v
+        else:
+            source_map={'NAPA':'stormwater',
+                        'COYOTE':'stormwater',
+                        'SCLARAVCc':'stormwater',
+                        'UALAMEDA':'stormwater',
+                        'cccsd':'CCCSD',
+                        'src000':'EBDA',
+                        'src001':'EBMUD',
+                        'sunnyvale':'SUNN',
+                        'fs':'FSSD',
+                        'palo_alto':'PA',
+                        'src002':'SFPUC',
+                        'san_jose':'SJ'}
+            source=source_map[src]
+
+        c=conc_ds.conc.isel(w_s=w_s_i).sel(source=source).item()
+        # 
+        if source=='stormwater':
+            scale=1./0.33
+        else:
+            scale=1./0.70 # for wastewater
+        return scale*c
+    return conc_func
 
 def add_cells(particles,grid,overwrite=False):
     """
@@ -715,7 +726,7 @@ if __name__=='__main__':
                                     np.datetime64("2017-07-30 03:00")],
                         z_range=None, # not ready
                         max_age=np.timedelta64(50,'D'),
-                        conc_func=conc_func,
+                        conc_func=conc_func_full(),
                         grid=grid)
 
 

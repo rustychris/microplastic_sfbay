@@ -24,13 +24,16 @@ def process_batch(ptm_runs,
                   time_range,
                   patterns,
                   z_ranges,
+                  conc_fn,
                   max_age_days=15,
                   spinup=None,
-                  version='v05'):
+                  version='v06'):
     # v03: shift to particles/m3 units (in sync with change in postprocess_v00).
     #   to speed things up, simply adjust v02 output if that exists.
     # v04: should be same as v03, but is recomputed, not just post-hoc scaled.
     # v05: start scaling up stormwater, too.
+    # v06: include new concentration inputs that derate stormwater and wastewater
+    #       per-category for blank contamination
 
     # spinup: timedelta such that when processing each run, only record particles
     #   beyond spinup into the run.
@@ -53,7 +56,7 @@ def process_batch(ptm_runs,
                                    z_range=None, # not ready
                                    max_age=np.timedelta64(max_age_days,'D'),
                                    spinup=spinup,
-                                   conc_func=post.conc_func,
+                                   conc_func=post.conc_func_full(conc_fn),
                                    grid=grid)
             log.info("Adding vertical info")
             result=post.add_z_info(result,grid,ptm_runs)
@@ -70,8 +73,10 @@ def process_batch(ptm_runs,
             #    ds.to_netcdf(conc_nc_fn)
             #    ds.close()
             #    log.info("Rescaled v02 output to v03")
-            if not os.path.exists(conc_nc_fn):
-                log.info(f"writing to {conc_nc_fn}")
+            if os.path.exists(conc_nc_fn):
+                log.info(f"netcdf {conc_nc_fn} exists")
+            else:
+                log.info(f"preparing data for {conc_nc_fn}")
                 p=parts()
                 p=post.filter_by_z_range(p,z_range,grid,ptm_runs)
                 conc=post.particle_to_density(p,grid,normalize='area')
@@ -90,7 +95,7 @@ def process_batch(ptm_runs,
                 ds['conc'].attrs['units']='particles m-2'
                 
                 ds.to_netcdf(conc_nc_fn)
-                log.info("done writing")
+                log.info(f"done writing netcdf to {conc_nc_fn}")
 
 def process_batch_onearg( full ):
     a,k=full
@@ -128,71 +133,89 @@ if __name__=="__main__":
                "20180415",
                "20180515"
     ]
+
+    conc_fns=[
+        ('std',"../loads/plastic_loads-7classes-v03.nc"),
+        ('nofiber',"../loads/plastic_loads-7classes-v03-nofiber.nc")
+    ]
     
     log.info("Gathering list of runs")
     calls=[] # (*a,**kw) for calls to process_batch
 
-    if 1:
-        # the basic, 15 day setup
-        for run_date in run_dates:
-            ptm_runs=[post.PtmRun(run_dir=d) 
-                      for d in glob.glob(f"/opt2/sfb_ocean/ptm/all_source/{run_date}/w*") ]
-            assert len(ptm_runs)==7
-
-            # just the time period with a full field for max_age=15D
-            start=np.timedelta64(15,'D') + utils.to_dt64(datetime.datetime.strptime(run_date,'%Y%m%d'))
-
-            time_range=[start,start+np.timedelta64(15,'D')]
-            # process_batch(ptm_runs,time_range,patterns,z_ranges=z_ranges)
-            for pattern in patterns:
-                # one pattern at a time
-                calls.append( ([ptm_runs,time_range,[pattern]],dict(z_ranges=z_ranges)) )
-    if 1:
-        # quirky 45-60 day setup.
-        # any particular run starts on the 15th of the month.
-        # runs for 60 days.
-        # e.g. 2017-09-15 00:00 to 2017-11-14 00:00
-        # exactly 60 days.
-        #
-
-        # in order to have [almost] a full field, to average over a spring-neap,
-        # and to maximize max age, the idea is to combine two runs at a time,
-        # and average over days 44-58 of the first run.
-        for runA,runB in zip(run_dates[:-1],run_dates[1:]):
-            log.info(f"considering a joint analysis of {runA}, {runB}")
-
-            max_age_days=44 # because of differences in the lengths of months, this can't be
-            # 45.
-            runA_start=utils.to_dt64(datetime.datetime.strptime(runA,'%Y%m%d'))
-            start=runA_start + np.timedelta64(44,'D')
-            stop =runA_start + np.timedelta64(58,'D')
-            time_range=[start,stop]
-
-            for ver,run in [ ('v05A',runA),
-                             ('v05B',runB) ]:
-                # need the 'w' prefix to skip bak directories
-                run_dirs=glob.glob(f"/opt2/sfb_ocean/ptm/all_source/{run}/w*")
-                if len(run_dirs)!=7:
-                    log.error(f"Expected 7 runs, got")
-                    for d in run_dirs:
-                        log.error(" " + d)
-                    raise Exception("Unexpected number of runs")
+    base_version='v07'
+    
+    for conc_version,conc_fn in conc_fns:
+        if 1:
+            version=base_version+conc_version # e.g. v07nofiber
+            
+            # the basic, 15 day setup
+            for run_date in run_dates:
                 ptm_runs=[post.PtmRun(run_dir=d) 
-                          for d in run_dirs ]
+                          for d in glob.glob(f"/opt2/sfb_ocean/ptm/all_source/{run_date}/w*") ]
+                assert len(ptm_runs)==7
 
+                # just the time period with a full field for max_age=15D
+                start=np.timedelta64(15,'D') + utils.to_dt64(datetime.datetime.strptime(run_date,'%Y%m%d'))
+
+                time_range=[start,start+np.timedelta64(15,'D')]
+                # process_batch(ptm_runs,time_range,patterns,z_ranges=z_ranges)
                 for pattern in patterns:
                     # one pattern at a time
-                    # will these get named okay? output goes into a folder with the
-                    # start and end dates, but have to include v05A / v05B to distinguish
-                    # the two parts, because the outputs do not include the run_dir.
-                    # spinup has to be set to zero, otherwise we'd drop all of runB when
-                    # it defaults to max age.
-                    calls.append( ([ptm_runs,time_range,[pattern]],dict(max_age_days=max_age_days,
-                                                                        spinup=np.timedelta64(0,'D'),
-                                                                        version=ver,
-                                                                        z_ranges=z_ranges)) )
+                    calls.append( ([ptm_runs,time_range,[pattern]],
+                                   dict(z_ranges=z_ranges,
+                                        conc_fn=conc_fn,
+                                        version=version)) )
+        if 1:
+            # quirky 45-60 day setup.
+            # any particular run starts on the 15th of the month.
+            # runs for 60 days.
+            # e.g. 2017-09-15 00:00 to 2017-11-14 00:00
+            # exactly 60 days.
+            #
+
+            # in order to have [almost] a full field, to average over a spring-neap,
+            # and to maximize max age, the idea is to combine two runs at a time,
+            # and average over days 44-58 of the first run.
+            for runA,runB in zip(run_dates[:-1],run_dates[1:]):
+                log.info(f"considering a joint analysis of {runA}, {runB}")
+
+                max_age_days=44 # because of differences in the lengths of months, this can't be
+                # 45.
+                runA_start=utils.to_dt64(datetime.datetime.strptime(runA,'%Y%m%d'))
+                start=runA_start + np.timedelta64(44,'D')
+                stop =runA_start + np.timedelta64(58,'D')
+                time_range=[start,stop]
+
+                for AB_version,run in [ ('A',runA),
+                                        ('B',runB) ]:
+                    version=base_version+AB_version+conc_version # e.g. v07Anofiber
+                    # need the 'w' prefix to skip bak directories
+                    run_dirs=glob.glob(f"/opt2/sfb_ocean/ptm/all_source/{run}/w*")
+                    if len(run_dirs)!=7:
+                        log.error(f"Expected 7 runs, got")
+                        for d in run_dirs:
+                            log.error(" " + d)
+                        raise Exception("Unexpected number of runs")
+                    ptm_runs=[post.PtmRun(run_dir=d) 
+                              for d in run_dirs ]
+
+                    for pattern in patterns:
+                        # one pattern at a time
+                        # will these get named okay? output goes into a folder with the
+                        # start and end dates, but have to include v06A / v06B to distinguish
+                        # the two parts, because the outputs do not include the run_dir.
+                        # spinup has to be set to zero, otherwise we'd drop all of runB when
+                        # it defaults to max age.
+                        calls.append( ([ptm_runs,time_range,[pattern]],dict(max_age_days=max_age_days,
+                                                                            spinup=np.timedelta64(0,'D'),
+                                                                            version=version,
+                                                                            conc_fn=conc_fn,
+                                                                            z_ranges=z_ranges)) )
     
     log.info("%d invocations"%len(calls))
     
-    with mp.Pool(16) as pool:
-        pool.map(process_batch_onearg, calls)
+    with mp.Pool(8) as pool:
+        count=0
+        for ret in pool.imap_unordered(process_batch_onearg, calls):
+            count+=1
+            log.info(f"--------{count} / {len(calls)} --------" )
