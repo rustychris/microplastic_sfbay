@@ -1,7 +1,7 @@
 # Show the field data in relation to
 #
 from matplotlib import colors
-
+import numpy as np
 import matplotlib.pyplot as plt 
 import pandas as pd
 from stompy import utils
@@ -16,12 +16,12 @@ g=unstructured_grid.UnstructuredGrid.from_ugrid("/home/rusty/src/sfb_ocean/sunta
 poly=g.boundary_polygon()
 
 ##
-version='v01std'
-#version='v01nofiber'
+#version='v01std'
+version='v01nofiber'
 
 def maybe_remove_fiber(df):
     if 'nofiber' in version:
-        slim=df[ df['Category_Final']!='Fiber' ]
+        slim=df[ df['Category_Final']!='Fiber' ].copy()
         print(f"Removing fibers: {len(df)} => {len(slim)} particles")
         return slim
     else:
@@ -277,7 +277,7 @@ sed_groups=pd.merge(sed_groups,sed_locs,left_index=True,right_index=True)
 
 ## 
 
-sed_groups.to_csv('sed_data_grouped.csv')
+sed_groups.to_csv(f'sed_data_grouped-{version}.csv')
 
 ## 
 # group by embayment?
@@ -303,13 +303,13 @@ g.plot_cells(values=np.log10(-g.cells['z_bed'].clip(-np.inf,-0.1)),cmap='jet',ax
 ax.axis('equal')
 
 for idx,row in sed_locs.iterrows():
-    xy=sed_plot_locs[k]
     ax.text(row['x'],row['y'],row['code'])
 ax.plot(sed_locs['x'],sed_locs['y'],'ko')
 
+ll2utm=proj_utils.mapper('WGS84','EPSG:26910')
 ll=np.c_[sed_samples['lon'],
          sed_samples['lat']]
-xy=proj_utils.mapper('WGS84','EPSG:26910')(ll)
+xy=ll2utm(ll)
 sed_samples['x']=xy[:,0]
 sed_samples['y']=xy[:,1]
 
