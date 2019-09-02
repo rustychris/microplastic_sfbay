@@ -27,8 +27,8 @@ def set_bold_labels(ax,y=-0.06):
     on the xaxis, and hides the middle tick label
     """
     txtargs=dict(style='italic',fontweight='bold',fontsize=12)
-    ax.text(0.0,y,"Floats",transform=ax.transAxes,va='top',ha='left',**txtargs)
-    ax.text(1,y,"Sinks",transform=ax.transAxes,va='top',ha='right',**txtargs)
+    ax.text(0.0,y,"Rising",transform=ax.transAxes,va='top',ha='center',**txtargs)
+    ax.text(1,y,"Settling",transform=ax.transAxes,va='top',ha='center',**txtargs)
     ax.text(0.5,y,"Passive",transform=ax.transAxes,va='top',ha='center',**txtargs)
     nticks=len(ax.get_xticklabels())
     ax.get_xticklabels()[nticks//2].set_visible(0)

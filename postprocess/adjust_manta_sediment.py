@@ -16,8 +16,8 @@ g=unstructured_grid.UnstructuredGrid.from_ugrid("/home/rusty/src/sfb_ocean/sunta
 poly=g.boundary_polygon()
 
 ##
-#version='v01std'
-version='v01nofiber'
+version='v01std'
+#version='v01nofiber'
 
 def maybe_remove_fiber(df):
     if 'nofiber' in version:
@@ -25,7 +25,12 @@ def maybe_remove_fiber(df):
         print(f"Removing fibers: {len(df)} => {len(slim)} particles")
         return slim
     else:
-        return df
+        if 'FibersYN' in df.columns:
+            slim=df[ df['FibersYN']=='Y' ].copy()
+            print(f"Removing samples that didn't count fibers: {len(df)} => {len(slim)} particles")
+            return slim
+        else:
+            return df
 
 ## 
 manta=maybe_remove_fiber(plastic_data.manta_df)
@@ -61,7 +66,7 @@ manta_per_sample['area_m2']=1e6*grp['Area'].first() # comes in km^2
 
 manta_per_sample['count_preblank'] = grp.size()
 
-for fld in ['lat','lon','SampleDate','Season','SampleType']:
+for fld in ['lat','lon','SampleDate','Season','SampleType','FibersYN']:
     manta_per_sample[fld] = grp[fld].first()
 
 ##
@@ -105,7 +110,23 @@ for v in manta_per_sample2.index.values:
     if 'DUP' in v:
         print(v)
         non_dupe=v.replace('-DUP','')
-        assert non_dupe in manta_per_sample2.index.values
+
+        if non_dupe not in manta_per_sample2.index.values:
+            # possible that the dupe counted fibers, but the non-dupe did not
+            # and has been dropped.
+            continue
+
+        # need to be careful about combining a DUPE where one had fibers counted
+        # and the other did not.  It does happen ('GFNMS26-Manta-12Sept2017')
+        # the original sample does not have fibers, and the dupe does.
+        if (manta_per_sample2.loc[v,'FibersYN']!=manta_per_sample2.loc[non_dupe,'FibersYN']):
+            if 'nofiber' in version:
+                # No problem - we don't care about fibers anyway
+                pass
+            else:
+                # Whichever sample
+                raise Exception("A sample and a dupe have differing FibersYN, and we *are* counting fibers")
+        
         for to_add in ['count','count_preblank','volume_l','area_m2'] + adj_cats + cats:
             manta_per_sample2.loc[non_dupe,to_add] += manta_per_sample2.loc[v,to_add]
         to_delete.append(v)
@@ -114,6 +135,9 @@ manta_per_sample2.drop(to_delete,inplace=True)
 ##
 manta_per_sample2['part_per_m3']= 1000*manta_per_sample2['count'] / manta_per_sample2['volume_l']
 manta_per_sample2['part_per_m2']= manta_per_sample2['count'] / manta_per_sample2['area_m2']
+
+manta_per_sample2['part_per_m3_raw']= 1000*manta_per_sample2['count_preblank'] / manta_per_sample2['volume_l']
+manta_per_sample2['part_per_m2_raw']= manta_per_sample2['count_preblank'] / manta_per_sample2['area_m2']
 
 ll=manta_per_sample2.loc[: , ['lon','lat']].values
 xy=np.nan*np.ones( (len(manta_per_sample2),2) )

@@ -103,7 +103,7 @@ field=df[df['field_sample_p']].copy()
 # Adjust particle weights by blanks.
 storm_blank_types=['FIELDQA','LABQA']
 
-blanks=df[ (df['SampleID']!='Bottle Blank') & df['SampleType_AW'].isin(storm_blank_types) ].copy() # only use field blanks
+blanks=df[ (df['SampleID']!='Bottle Blank') & df['SampleType_AW'].isin(storm_blank_types) ].copy() 
 
 n_blank_samples=len(blanks['SampleID'].unique())
 n_field_samples=len(field['SampleID'].unique())
@@ -352,12 +352,16 @@ print(str(df_out))
 
 ##
 
+
+##
+
 out_fn=f'plastic_loads-7classes-{version}.nc'
 os.path.exists(out_fn) and os.unlink(out_fn)
 ds.to_netcdf(out_fn)
 
 ##
 
+##
 df_out.to_excel(out_fn.replace('.nc','.xlsx'))
 
 ##
