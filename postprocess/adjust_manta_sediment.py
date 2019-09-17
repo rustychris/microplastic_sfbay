@@ -286,6 +286,11 @@ sed_samples['part_per_mass']=sed_samples['count_adj'] / sed_samples['Mass']
 
 ##
 
+# Write out the per-sample data, but limit to field samples
+sed_samples[ sed_samples.field_sample_p ].to_csv('sed_samples.csv')
+
+
+##
 grp=sed_samples[ sed_samples['field_sample_p'] ].groupby('Group2')
 sed_groups=pd.DataFrame()
 sed_groups['part_per_mass']=grp['part_per_mass'].mean()

@@ -80,7 +80,8 @@ for box,sty in zip(boxes['boxes'],cyc):
     box.set_facecolor(sty['color'])
 
 common.set_bold_labels(ax,y=-0.12)
-
+ax.set_ylabel('Abundance')
+    
 plt.setp(ax_typ.spines.values(),visible=0)
 ax_typ.xaxis.set_visible(0)
 

@@ -20,8 +20,19 @@ fig.clf()
 small=5e-4
 
 bins=10**np.linspace(np.log10(small),-0.5,50)
-w_s=combined['w_s']
+# 2019-09-06: Don pointed out a discrepancy in the plots, and it traces back to here.
+# used to use all samples.
+#  w_s=combined['w_s']
+#  w_s_val=w_s[np.isfinite(w_s)]
+# It had already been using the right subset for the bars, but the histogram used
+# the wrong set.
+sel=combined['pathway'].isin(['stormwater','effluent']) & combined['field_sample_p']
+valid=combined[sel].copy()
+w_s=valid['w_s']
 w_s_val=w_s[np.isfinite(w_s)]
+
+# HERE -
+# how hard is it to weights these according to loads?
 
 w_s_mapped=common.map_bilog(w_s_val)
 all_bins=np.r_[ -bins[::-1], bins ]
@@ -46,13 +57,13 @@ ax.axvline(0,ls='--',color='k',lw=0.5,zorder=-2)
 
 common.set_bold_labels(ax,y=-0.11)
 
+ax.set_ylabel('Abundance')
+
 ax_typ=fig.add_subplot(gs[:-1,:],sharex=ax)
 plt.setp(ax_typ.get_xticklabels(),visible=0)
 
 # choose the 20 most common types
 # split foams out separately
-sel=combined['pathway'].isin(['stormwater','effluent']) & combined['field_sample_p']
-valid=combined[sel].copy()
 
 my_types=valid['PlasticType_Final'].copy()
 foams=valid['Category_Final']=='Foam'

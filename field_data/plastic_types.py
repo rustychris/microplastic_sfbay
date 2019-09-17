@@ -148,3 +148,58 @@ with open('types-table.tex', 'wt') as fp:
 # Fluoroelastomer                               1
 # Unknown Potentially Rubber                    1
 # Polyether block amide                         1
+
+
+##
+
+# Becky asks if PTFE is really top 30
+
+# loads.groupby('PlasticType_Final').size().sort_values(ascending=False)
+
+#          PlasticType_Final
+#          Not Identified                          7975
+#  1       Rubber                                  5863
+#          Anthropogenic (unknown base)             511
+#  2       Polyethylene                             265
+#          Unknown                                  191
+#          Stearates, Lubricants, Waxes             143
+#  3       Anthropogenic (cellulosic)               102
+#  4       Polyester                                 99
+#          Anthropogenic (synthetic)                 91
+#  5       Cotton                                    67
+#  6       Cellulose acetate                         62
+#  7       Polypropylene                             62
+#  8       Acrylic                                   49
+#  9       Cellulosic                                42
+#  10      Ethylene/vinyl acetate copolymer          22
+#  11      Polyvinyl chloride                        22
+#  12      Nylon                                     22
+#  13      Glass                                     17
+#          Inorganic natural material                17
+#  14      Organic natural material                  16
+#  15      Polyethylene terephthalate                15
+#  16      Polyurethane                              13
+#  17      Wool                                      11
+#  18      Paint                                      8
+#  19      Polystyrene                                8
+#  20      Polyvinyl butyral                          8
+#  21      Methyl vinyl ether copolymers              6
+#  21      Acrylonitrile butadiene styrene            5
+#  22      Polyethylene co-acrylic acid               5
+#  23      Polyethylene/polypropylene copolymer       5
+#  24      Styrene copolymer                          4
+#  25      Polytetrafluoroethylene                    3
+#  26      Polyvinyl acetate                          3
+#          Polystyrene/acrylic copolymer              2
+#          Polyvinyl alcohol                          2
+#          Phenolic resin                             2
+#          Silicone                                   2
+#          Polyvinyl ether                            1
+#          Unknown Potentially Rubber                 1
+#          Fluoroelastomer                            1
+#          Polycarbonate                              1
+#          Polyethylenimine                           1
+#          Poly(Aryletherketone)                      1
+#          Polyacrolein                               1
+#          Polyether block amide                      1
+

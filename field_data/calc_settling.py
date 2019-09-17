@@ -32,7 +32,19 @@ density["Polyester"]=1.39 # https://nptel.ac.in/courses/116102026/36
 density["Polyamide"]=1.14 # https://www.azom.com/article.aspx?ArticleID=477
 density["Wool"]=1.29 # https://www.researchgate.net/publication/47929535_Measurement_of_density_and_medullation_in_wool
 density["Paint"]=1.4 # is this alkyd binder? https://pubs.acs.org/doi/pdf/10.1021/es501757s
-# paints were mostly fragments.
+# paints were mostly fragments. specific Raman IDs were:
+# wood stain with oil and wax (Paint)
+#    
+# isobutyl methacrylate-based paint
+#    that's a liquid, though.
+# Paint x 3 (incl. one that also said Rayon, poor match)
+# blend of hydrocarbons, polyglycols and silicat...
+# Watercolor Paint
+#    mostly just pigment.
+# Formex Extra White-Grey 0101 (Paint)
+# Can assume that paint solids are denser than water.
+# The assumption of alkyd binder above would be for oil-based paint.
+# 
 
 density["Methyl vinyl ether copolymers"]=1.05 # http://polymerdatabase.com/polymers/polymethylvinylether.html
 
