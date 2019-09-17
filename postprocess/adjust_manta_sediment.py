@@ -287,7 +287,7 @@ sed_samples['part_per_mass']=sed_samples['count_adj'] / sed_samples['Mass']
 ##
 
 # Write out the per-sample data, but limit to field samples
-sed_samples[ sed_samples.field_sample_p ].to_csv('sed_samples.csv')
+sed_samples[ sed_samples.field_sample_p ].to_csv(f'sed_samples-{version}.csv')
 
 
 ##
