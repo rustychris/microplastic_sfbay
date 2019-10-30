@@ -16,8 +16,8 @@ g=unstructured_grid.UnstructuredGrid.from_ugrid("/home/rusty/src/sfb_ocean/sunta
 poly=g.boundary_polygon()
 
 ##
-version='v01std'
-#version='v01nofiber'
+#version='v01std'
+version='v01nofiber'
 
 def maybe_remove_fiber(df):
     if 'nofiber' in version:
@@ -52,6 +52,8 @@ grouped['lon']=0.5*(grouped['LONG START']+grouped['LONG END'])
 manta_ll=grouped.loc[:,['lat','lon']]
 
 # 47 don't get a lat/lon
+# CB7-1 is missing lat/lon, but can I assume that it's about the same as CB7 and
+# CB7-2?
 manta=pd.merge(manta,manta_ll,left_on='StationCode',right_index=True,how='left')
 
 print("Stations missing lat/lon in manta: %s"%
