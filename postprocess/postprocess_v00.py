@@ -6,6 +6,7 @@ The goal is to generate concentration fields on the computational grid reflectin
 each source x settling velocity combination.
 
 """
+from collections import defaultdict
 import glob
 import numpy as np
 import xarray as xr
@@ -126,8 +127,17 @@ class PtmRun(object):
                 # make sure it's not a terrible issue
                 assert ds[v].std(dim='Nt').max()<1.0
                 ds[v]=ds[v].isel(Nt=0)
+
+            # A bit goofy, but try to avoid a race condition, short of
+            # utilizing a real lock.
+            tmp_fn=compiled_fn+"."+str(os.getpid())
+            ds.to_netcdf(tmp_fn)
+            if not os.path.exists(compiled_fn):
+                os.rename(tmp_fn,compiled_fn)
+            else:
+                log.warning("Things got racy while transcribing BC data")
+                os.unlink(tmp_fn)
                 
-            ds.to_netcdf(compiled_fn)
             for model in self.hydro_models():
                 model.bc_ds.close()
                 model.bc_ds=None
@@ -215,7 +225,7 @@ base_ret_dtype=[ ('x',np.float64,3), # location
                  ('grp_rel_per_hour',np.float64),
                  ('mass',np.float64)]
 
-def scan_group(self,group,time_range,z_range=None,grid=None,
+def scan_group(self,group,time_range,grid=None,
                max_age=np.timedelta64(30,'D'),spinup=None,
                weight=1.0,
                extra_fields=[]):
@@ -225,13 +235,6 @@ def scan_group(self,group,time_range,z_range=None,grid=None,
     mass is returned per particle, based on the number of particles released per hour,
       the flow associated with the particular source, and the number of time steps 
       integrated over.
-
-    z_range: a pair of z coordinates denoting what part of the water column to include.
-     - this requires a grid which has per-cell z_bed with the same datum as
-       the ptm run.
-     - values are taken as positive-up, with bed=0.
-
-     currently experimenting with having the z_range part in a post processing step.
     """
     if spinup is None: spinup=max_age
 
@@ -318,9 +321,6 @@ def scan_group(self,group,time_range,z_range=None,grid=None,
             sel=age < max_age
             # this is where we could further filter on where the particles
             # are, further narrowing the sel array
-            # but doing the z_range filter after the fact will make it easier
-            # to streamline, and probably more efficient than doing it here.
-            assert z_range is None,"Have not implemented z-range yet"
             
             ret=np.zeros(len(parts[sel]),ret_dtype)
             ret['x']=parts['x'][sel]
@@ -355,7 +355,7 @@ def scan_group(self,group,time_range,z_range=None,grid=None,
 # for the moment, I'm ignoring the Delta, too.
 skip_source=['petaluma','sonoma_valley','ddsd','lg']
 
-def query_runs(ptm_runs,group_patt,time_range,z_range=None,grid=None,
+def query_runs(ptm_runs,group_patt,time_range,grid=None,
                max_age=np.timedelta64(30,'D'),
                spinup=None,
                conc_func=lambda group,source,behavior: 1.0,
@@ -364,8 +364,7 @@ def query_runs(ptm_runs,group_patt,time_range,z_range=None,grid=None,
     ptm_runs: List of PtmRun instancse
     groups: regular expression matching the group names of interest
     time_range: pair of datetime64s defining time period to include
-    z_range: come back to this, but it will be a way to filter on 
-     vertical position.
+    used to take z_range, but that is now handle by the caller
     max_age: ignore particles older than this
     spinup: don't return particles within this interval of the
      start of the run, defaults to max_age.
@@ -376,6 +375,8 @@ def query_runs(ptm_runs,group_patt,time_range,z_range=None,grid=None,
       determines how to scale each of the runs.  defaults to average.  that's
       not great if one run had a much larger particles_per_release.
       then again, currently particles_per_release is assumed!
+
+    Returns a xr.Dataset, or None if no matching groups were found.
     """
     if spinup is None:
         spinup=max_age
@@ -434,7 +435,11 @@ def query_runs(ptm_runs,group_patt,time_range,z_range=None,grid=None,
             part_obs['run_idx']=run_idx
             
             all_part_obs.append(part_obs)
-    result=np.concatenate(all_part_obs)
+
+    if len(all_part_obs)==0:
+        return None
+    
+    result=np.concatenate(all_part_obs) # this is getting a memory error
     assert np.isnan(result['grp_rel_per_hour']).sum()==0
 
     # Convert to xarray Dataset for easier processing down the line.
@@ -485,24 +490,46 @@ def conc_func_full(conc_fn=default_conc_fn):
             log.info(f"Got {src} -- returning {v}")
             return v
         else:
-            source_map={'NAPA':'stormwater',
-                        'COYOTE':'stormwater',
-                        'SCLARAVCc':'stormwater',
-                        'UALAMEDA':'stormwater',
-                        'cccsd':'CCCSD',
-                        'src000':'EBDA',
-                        'src001':'EBMUD',
-                        'sunnyvale':'SUNN',
-                        'fs':'FSSD',
-                        'palo_alto':'PA',
-                        'src002':'SFPUC',
-                        'san_jose':'SJ'}
+            if 0: # pre-020 hydro runs:
+                source_map={'NAPA':'stormwater',
+                            'COYOTE':'stormwater',
+                            'SCLARAVCc':'stormwater',
+                            'UALAMEDA':'stormwater',
+                            'cccsd':'CCCSD',
+                            'src000':'EBDA',
+                            'src001':'EBMUD',
+                            'sunnyvale':'SUNN',
+                            'fs':'FSSD',
+                            'palo_alto':'PA',
+                            'src002':'SFPUC',
+                            'san_jose':'SJ'}
+            else: # post-020 hydro runs
+                # almost everything is stormwater, so just create a default
+                # dicut and explicitly name the non-stormwater.
+                source_map=defaultdict(lambda:'stormwater')
+                source_map['cccsd']='CCCSD'
+                source_map['sunnyvale']='SUNN'
+                source_map['fs']='FSSD'
+                source_map['palo_alto']='PA'
+                source_map['san_jose']='SJ'
+                source_map['src000']='EBDA'
+                source_map['src001']='EBMUD'
+                source_map['src002']='SFPUC'
+                # These shouldn't be used, but including just to be sure
+                # that if they somehow show up, they won't contaminate
+                # stormwater.
+                source_map['SacRiver']='DELTA'
+                source_map['SJRiver']='DELTA'
+                
             source=source_map[src]
+            assert source!='DELTA'
 
         c=conc_ds.conc.isel(w_s=w_s_i).sel(source=source).item()
         # 
         if source=='stormwater':
-            scale=1./0.33
+            #scale=1./0.33
+            # With 020 hydro runs, no need to scale stormwater
+            scale=1.0 
         else:
             scale=1./0.70 # for wastewater
         return scale*c
