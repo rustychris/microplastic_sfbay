@@ -1,3 +1,6 @@
+"""
+Build database for sql-based postprocessing
+"""
 import os
 import pandas as pd
 import glob
@@ -9,13 +12,9 @@ import numpy as np
 from stompy.grid import unstructured_grid
 from stompy import utils
 import pandas as pd
-import geopandas as gpd
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 from stompy.model.fish_ptm import ptm_tools
-
-## 
-g=unstructured_grid.UnstructuredGrid.from_ugrid("/home/rusty/src/sfb_ocean/suntans/grid-merge-suisun/splice-merge-05-filled-edit70.nc")
 
 ##
 
@@ -65,8 +64,7 @@ def add_grid_to_db(g,con):
 
     con.commit()                
 
-# how does it stack up for 3M particles? 60s.
-##
+
 
 ##
 
@@ -101,7 +99,7 @@ def init_ptm_tables(con):
      group_id integer not null,
      start_id integer not null, -- inclusive
      end_id   integer not null, -- inclusive
-     weight DOUBLE,
+     volume DOUBLE,
      FOREIGN KEY(group_id) REFERENCES ptm_group(id)
     );""")
 
@@ -151,43 +149,56 @@ def clean_ptm_tables(con):
     curs.execute("DELETE FROM ptm_group;")
     curs.execute("DELETE FROM ptm_run;")
 
-def add_ptm_run_to_db(run_dir,con):
+def add_ptm_run_to_db(run,con,grid):
+    """
+    run: a postprocess_v00.PtmRun instance
+    con: database connection
+    grid: the corresponding grid (might be supplanted)
+    """
     curs=con.cursor()
 
     curs.execute("INSERT into ptm_run (run_dir) VALUES (?)",
-                 [run_dir])
+                 [run.run_dir])
     run_id=curs.lastrowid
     
-    groups=glob.glob(os.path.join(run_dir,"*_bin.out"))
-    groups.sort()
+    for group in run.groups():
+        add_ptm_group_to_db(group,run,run_id,con,curs,grid)
 
-    for group in groups:
-        add_ptm_group_to_db(group,run_dir,run_id,con,curs)
+def add_ptm_group_to_db(group,run,run_id,con,curs,grid):
+    pbf=run.open_binfile(group)
 
-def add_ptm_group_to_db(group,run_dir,run_id,con,curs):
-    pbf=ptm_tools.PtmBin(group)
-    name=pbf.release
+    name=group
     curs.execute("""INSERT into ptm_group (name,filename,run_id)
                     VALUES (?,?,?)""",
-                 [name,group,run_id])
+                 [name,name,run_id])
     group_id=curs.lastrowid
-    print(f"Run [{run_id}] {run_dir}   Group [{group_id}] {name}")
+    print(f"Run [{run_id}] {run.run_dir}   Group [{group_id}] {name}")
 
     # Record the data from release_log
-    release_log=ptm_tools.ReleaseLog(group.replace('_bin.out','.release_log'))
+    release_log=run.open_release_log(group)
     release=release_log.intervals
     release['group_id']=group_id
     release['epoch']=(release['time'] - pd.Timestamp("1970-01-01")) // pd.Timedelta('1s')
+
+    # HERE - add in volume information.
+    Qfunc=run.get_Qfunc_for_group(group)
+    # no negative flows, which can happen with SJ river
+    Q=Qfunc(release['time'].values).clip(0,np.inf)
+    
+    grp_hour_per_rel=(release['time'].values[1] - release['time'].values[0])/np.timedelta64(3600,'s')
+    # m3/s * s/hour * hour/release => m3/release
+    volume=Q*3600 * grp_hour_per_rel
     
     rows=zip( release['epoch'],
               release['count'],
               release['group_id'],
               release['gid_min'],
-              release['gid_max'] )
+              release['gid_max'],
+              volume )
     
     curs.executemany(f"""
-    INSERT into ptm_release (time,count,group_id,start_id,end_id)
-      VALUES (?,?,?,?,?)""",
+    INSERT into ptm_release (time,count,group_id,start_id,end_id,volume)
+      VALUES (?,?,?,?,?,?)""",
                      rows)
 
     print("Populating unique particles based on releases")
@@ -200,7 +211,7 @@ def add_ptm_group_to_db(group,run_dir,run_id,con,curs):
     # create the particles
     for rel in releases:
         for i in range(rel[1],rel[2]+1):
-            print(f"insert: {i:5d} {group_id:5d}")
+            # print(f"insert: {i:5d} {group_id:5d}")
             curs.execute("""INSERT INTO particle (ptm_id,group_id,release_id)
                              VALUES (?,?,?);""",
                          (i,group_id,rel[0]) )
@@ -236,7 +247,7 @@ def add_ptm_group_to_db(group,run_dir,run_id,con,curs):
     # 42 seconds.
     t=time.time()
     # be sure to insert these as regular int
-    all_cell=[int(c) for c in g.points_to_cells(all_xy)]
+    all_cell=[int(c) for c in grid.points_to_cells(all_xy)]
     elapsed=time.time() - t
     print("Python mapping time: %.3fs"%elapsed)
 
@@ -259,11 +270,17 @@ def add_ptm_group_to_db(group,run_dir,run_id,con,curs):
         print("Trying again")
         con.commit()
         
-##     
-fn="ptm_and_grid.db"
-clean=True
+##
 
-six.moves.reload_module(ptm_tools)
+import postprocess_v00 as post
+
+run=post.PtmRun(run_dir="/opt2/sfb_ocean/ptm/all_source_020/20170715/w0.0")
+
+grid=run.grid()
+
+fn=os.path.join(run.run_dir,"ptm_and_grid.db")
+
+clean=True
 
 if clean :
     os.path.exists(fn) and os.unlink(fn)
@@ -275,154 +292,14 @@ if use_spatial:
     con.execute('SELECT InitSpatialMetadata()')
 
 if clean:
-    add_grid_to_db(g,con)
+    add_grid_to_db(grid,con)
     init_ptm_tables(con)
 
 clean_ptm_tables(con)
 
-add_ptm_run_to_db("/home/rusty/src/sfb_ocean/ptm/all_sources/all_source_select_w_const",
-                  con)
-
-# That's running. see where it gets us.
-# maybe need more commits?
-
-##
-
-# ok - so before going any further with the details like weights and z-coord,
-# how does this do with queries?
-
-con = sql.connect(fn)
-curs=con.cursor()
-
-## 
-def db(sql,*a,row_limit=5):
-    t=time.time()
-    curs.execute(sql,*a)
-    results=curs.fetchall()
-    elapsed=time.time() -t
-    print("Query time: %.2fs"%elapsed)
-    print("Returned %d rows"%len(results))
-    if row_limit:
-        print(results[:row_limit])
-    else:
-        print(results)
+add_ptm_run_to_db(run,con,grid)
+for group in run.groups():
+    # flow data for assigning particle mass
+    Qfunc=run.get_Qfunc_for_group(group)
 
 ##
-# a few seconds
-curs.execute("ANALYZE")
-con.commit()
-
-##
-
-# index on time?
-# takes 115s.
-db("CREATE INDEX IF NOT EXISTS particle_time_idx on particle_loc (time);")
-db("ANALYZE") # 13s
-
-## 
-# 187_585_005  particle locations.
-# 118_877_472  on the second go-around. failed earlier.
-# this query was a bit slow, like 10s.
-db("select count(1) from particle_loc")
-
-## 
-time_start=int( utils.to_unix( np.datetime64("2017-07-15") ) )
-time_stop =int( utils.to_unix( np.datetime64("2017-07-16") ) )
-
-# 4_146_976
-# query time: 13s w/o index.
-# 0.12s with index.
-db("""
-   select count(1) from particle_loc
-    where time>=? and time < ?""",
-   [time_start,time_stop])
-
-##
-
-# closer to the real deal. 0.6s
-db("""
-   select min(loc.cell),count(1) 
-    from particle_loc as loc
-    where loc.time>=? and loc.time < ?
-      and loc.cell>=0
-    group by loc.cell""",
-   [time_start,time_stop])
-
-##
-
-# also 0.6s
-db("""
-   select min(loc.cell),count(1)
-    from particle_loc as loc, particle as p
-    where loc.time>=? and loc.time < ?
-      and loc.particle_id=p.id
-      and loc.cell>=0
-    group by loc.cell""",
-   [time_start,time_stop])
-
-##
-# db("update ptm_release set weight=1.0")
-
-# basically the real deal. 0.86s for 24 hour
-# for 15 days, that becomes 12s.
-db("""
-   select min(loc.cell),sum(rel.weight)
-    from particle_loc as loc, particle as p, ptm_release as rel
-    where loc.time>=? and loc.time < ?
-      and loc.particle_id=p.id
-      and p.release_id=rel.id
-      and loc.cell>=0
-    group by loc.cell""",
-   [time_start,time_start+15*86400])
-
-## 
-db("""
-   explain query plan
-   select min(loc.cell),sum(rel.weight)
-    from particle_loc as loc, particle as p, ptm_release as rel
-    where loc.time>=? and loc.time < ?
-      and loc.particle_id=p.id
-      and p.release_id=rel.id
-      and loc.cell>=0
-    group by loc.cell""",
-   [time_start,time_start+15*86400],
-   row_limit=None)
-
-##
-
-# This is a pretty close to a real query, and takes about 2s.
-# the data load was incomplete, so it doesn't reflect the full
-# size of the dataset.
-# looks like 36/54 groups were loaded.
-# total bin_out size is 5.6G.
-# so the database currently holds about 3.73G worth of bin.out
-# database size is 4 222 980 096. so we're slightly less efficient
-# than the binary data.
-curs.execute("""
-   select min(loc.cell),sum(rel.weight)
-    from particle_loc as loc, particle as p, ptm_release as rel
-    where loc.time>=? and loc.time < ?
-      and loc.particle_id=p.id
-      and p.release_id=rel.id
-      and loc.cell>=0
-    group by loc.cell""",
-   [time_start,time_stop])
-
-data=np.array( curs.fetchall() )
-
-cell_count=np.zeros(g.Ncells(),np.float64)
-cell_count[data[:,0].astype(np.int32)]=data[:,1]
-
-cell_2dconc=cell_count/g.cells_area()
-
-##
-plt.figure(1).clf()
-
-ccoll=g.plot_cells(values=cell_2dconc.clip(1e-5,np.inf),
-                   cmap='jet',norm=LogNorm())
-ccoll.set_edgecolor('face')
-plt.axis('equal')
-
-##
-run_dir="/home/rusty/src/sfb_ocean/ptm/all_sources/all_source_select_w_const"
-groups=glob.glob(os.path.join(run_dir,"*_bin.out"))

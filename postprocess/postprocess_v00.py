@@ -169,6 +169,9 @@ class PtmRun(object):
         return tokens
     def open_binfile(self,group):
         return ptm_tools.PtmBin(os.path.join(self.run_dir,group+'_bin.out'))
+    
+    def open_release_log(self,group):
+        return ptm_tools.ReleaseLog(os.path.join(self.run_dir,group+'.release_log'))
 
     def groups(self):
         """
@@ -211,6 +214,10 @@ class PtmRun(object):
             ti=np.searchsorted(Q_time_series.time.values,t)
             return Q_time_series.values[ti]
         return Q_for_t
+
+    def grid(self):
+        return grid_from_ptm_hydro(self.ptm_hydro_files()[0])
+    
     
 # information that will be filled in by scan_group()
 base_ret_dtype=[ ('x',np.float64,3), # location
