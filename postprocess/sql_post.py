@@ -7,6 +7,7 @@ import glob
 import time
 import six
 from sqlite3 import dbapi2 as sql
+import xarray as xr
 
 import numpy as np
 from stompy.grid import unstructured_grid
@@ -99,6 +100,8 @@ def init_ptm_tables(con):
      group_id integer not null,
      start_id integer not null, -- inclusive
      end_id   integer not null, -- inclusive
+     -- water volume represented by a single particle from this release
+     -- assuming the release is not duplicated by another release
      volume DOUBLE,
      FOREIGN KEY(group_id) REFERENCES ptm_group(id)
     );""")
@@ -226,30 +229,39 @@ def add_ptm_group_to_db(group,run,run_id,con,curs,grid):
     part_ids=[] # the globally unique ids
     epochs=[]
     xys=[]
+
+    # Fastest to compute cells for all of the points at once, then cache the
+    # result for returning by read_timesteps.  Since this mapping is grid-dependent
+    # require that the grid be provided, and the returned key can be efficiently
+    # used to return the correct cache data later.
+    cell_fn=pbf.precompute_cells(grid)
+    cell_ds=xr.open_dataset(cell_fn)
+    all_cell=[int(c) for c in cell_ds['cell'].values]
     
     for ts in utils.progress(range(Nsteps)):
+        # caching of the mapping from point to grid is 
         dnum,parts=pbf.read_timestep(ts)
         epoch=utils.to_unix(dnum)
         if ts%100==0:
             print(f"{ts} {dnum} {len(parts)}")
-        xys.append( parts['x'][:,:2].copy() )
+        # xys.append( parts['x'][:,:2].copy() )
         gids.append( parts['id'].copy() )
         part_ids.append( [ group_gid_to_particle[(group_id,gid)]
                            for gid in parts['id'] ] )
         epochs.append( epoch*np.ones(len(parts['id']),np.int32) )
 
-    all_xy=np.concatenate(xys)
+    # all_xy=np.concatenate(xys)
     # all_gid=[int(i) for i in np.concatenate(gids)]
     all_part_id=[pid for sublist in part_ids for pid in sublist] # flatten
     all_epoch=[int(t) for t in np.concatenate(epochs)]
     
-    # How does that compare to what I can do in straight python?
-    # 42 seconds.
-    t=time.time()
-    # be sure to insert these as regular int
-    all_cell=[int(c) for c in grid.points_to_cells(all_xy)]
-    elapsed=time.time() - t
-    print("Python mapping time: %.3fs"%elapsed)
+    # # How does that compare to what I can do in straight python?
+    # # 42 seconds.
+    # t=time.time()
+    # # be sure to insert these as regular int
+    # all_cell=[int(c) for c in grid.points_to_cells(all_xy)]
+    # elapsed=time.time() - t
+    # print("Python mapping time: %.3fs"%elapsed)
 
     rows=zip(all_part_id,all_epoch,all_cell)
     curs.executemany("""
