@@ -17,6 +17,8 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 from stompy.model.fish_ptm import ptm_tools
 
+import postprocess_v00 as post
+
 ##
 
 use_spatial=False
@@ -152,22 +154,26 @@ def clean_ptm_tables(con):
     curs.execute("DELETE FROM ptm_group;")
     curs.execute("DELETE FROM ptm_run;")
 
-def add_ptm_run_to_db(run,con,grid):
+def add_ptm_run_to_db(run,con,grid,z_extractor=None):
     """
     run: a postprocess_v00.PtmRun instance
     con: database connection
     grid: the corresponding grid (might be supplanted)
+    z_extractor: instance of EtaExtractor.
     """
     curs=con.cursor()
 
     curs.execute("INSERT into ptm_run (run_dir) VALUES (?)",
                  [run.run_dir])
     run_id=curs.lastrowid
-    
-    for group in run.groups():
-        add_ptm_group_to_db(group,run,run_id,con,curs,grid)
 
-def add_ptm_group_to_db(group,run,run_id,con,curs,grid):
+    if z_extractor is None:
+        z_extractor=post.EtaExtractor(ptm_runs=[run])
+        
+    for group in run.groups():
+        add_ptm_group_to_db(group,run,run_id,con,curs,grid,z_extractor=z_extractor)
+
+def add_ptm_group_to_db(group,run,run_id,con,curs,grid,z_extractor=None):
     pbf=run.open_binfile(group)
 
     name=group
@@ -183,7 +189,7 @@ def add_ptm_group_to_db(group,run,run_id,con,curs,grid):
     release['group_id']=group_id
     release['epoch']=(release['time'] - pd.Timestamp("1970-01-01")) // pd.Timedelta('1s')
 
-    # HERE - add in volume information.
+    # add in volume information.
     Qfunc=run.get_Qfunc_for_group(group)
     # no negative flows, which can happen with SJ river
     Q=Qfunc(release['time'].values).clip(0,np.inf)
@@ -236,7 +242,13 @@ def add_ptm_group_to_db(group,run,run_id,con,curs,grid):
     # used to return the correct cache data later.
     cell_fn=pbf.precompute_cells(grid)
     cell_ds=xr.open_dataset(cell_fn)
-    all_cell=[int(c) for c in cell_ds['cell'].values]
+    cell_offsets=cell_ds.offset.values
+    cell_ends=cell_offsets + cell_ds['count'].values
+    cells=cell_ds['cell'].values
+    all_cell=[int(c) for c in cells]
+
+    z_from_beds=[]
+    z_from_surfs=[]
     
     for ts in utils.progress(range(Nsteps)):
         # caching of the mapping from point to grid is 
@@ -245,6 +257,17 @@ def add_ptm_group_to_db(group,run,run_id,con,curs,grid):
         if ts%100==0:
             print(f"{ts} {dnum} {len(parts)}")
         # xys.append( parts['x'][:,:2].copy() )
+        part_z=parts['x'][:,2].copy()
+        
+        eta=z_extractor.eta_for_time(utils.to_dt64(dnum))
+        c=cells[cell_offsets[ts]:cell_ends[ts]]
+        z_eta=eta[c]
+        z_bed=grid.cells['z_bed'][c]
+        part_z_from_bed=part_z-z_bed # should be >=0
+        part_z_from_surf=part_z-z_eta
+        z_from_beds.append(part_z_from_bed)
+        z_from_surfs.append(part_z_from_surf)
+        
         gids.append( parts['id'].copy() )
         part_ids.append( [ group_gid_to_particle[(group_id,gid)]
                            for gid in parts['id'] ] )
@@ -254,6 +277,8 @@ def add_ptm_group_to_db(group,run,run_id,con,curs,grid):
     # all_gid=[int(i) for i in np.concatenate(gids)]
     all_part_id=[pid for sublist in part_ids for pid in sublist] # flatten
     all_epoch=[int(t) for t in np.concatenate(epochs)]
+    all_z_from_bed=np.concatenate(z_from_beds)
+    all_z_from_surf=np.concatenate(z_from_surfs)
     
     # # How does that compare to what I can do in straight python?
     # # 42 seconds.
@@ -263,10 +288,10 @@ def add_ptm_group_to_db(group,run,run_id,con,curs,grid):
     # elapsed=time.time() - t
     # print("Python mapping time: %.3fs"%elapsed)
 
-    rows=zip(all_part_id,all_epoch,all_cell)
+    rows=zip(all_part_id,all_epoch,all_cell,all_z_from_bed,all_z_from_surf)
     curs.executemany("""
-                     INSERT INTO particle_loc (particle_id,time,cell)
-                     VALUES (?,?,?)""",
+                     INSERT INTO particle_loc (particle_id,time,cell,z_from_bed,z_from_surface)
+                     VALUES (?,?,?,?,?)""",
                      rows)
     
     # Still TODO: 
@@ -284,34 +309,76 @@ def add_ptm_group_to_db(group,run,run_id,con,curs,grid):
         
 ##
 
-import postprocess_v00 as post
 
-run=post.PtmRun(run_dir="/opt2/sfb_ocean/ptm/all_source_020/20170715/w0.0")
+#run=post.PtmRun(run_dir="/opt2/sfb_ocean/ptm/all_source_020/20170715/w0.0")
+#fn=os.path.join(run.run_dir,"ptm_and_grid.db")
+# getting ready for the older runs.
 
-grid=run.grid()
+months=[
+    #"/opt2/sfb_ocean/ptm/all_source/20170715",
+    "/opt2/sfb_ocean/ptm/all_source/20170815",
+    "/opt2/sfb_ocean/ptm/all_source/20170915",
+    "/opt2/sfb_ocean/ptm/all_source/20171015",
+    "/opt2/sfb_ocean/ptm/all_source/20171115",
+    "/opt2/sfb_ocean/ptm/all_source/20171215",
+    "/opt2/sfb_ocean/ptm/all_source/20180115",
+    "/opt2/sfb_ocean/ptm/all_source/20180215",
+    "/opt2/sfb_ocean/ptm/all_source/20180315",
+    "/opt2/sfb_ocean/ptm/all_source/20180415",
+    "/opt2/sfb_ocean/ptm/all_source/20180515"
+]
 
-fn=os.path.join(run.run_dir,"ptm_and_grid.db")
 
-clean=True
+for month in months:
+    # Try shoving all of one month into the same database
+    speeds=[
+        "w0.0",
+        "w-0.0005",
+        "w0.0005",
+        "w-0.005",
+        "w0.005",
+        "w-0.05",
+        "w0.05"
+    ]
+    
+    run_dirs=[os.path.join(month,speed)
+              for speed in speeds ]
 
-if clean :
-    os.path.exists(fn) and os.unlink(fn)
+    fn=os.path.join(month,"ptm_and_grid.db")
+    if os.path.exists(fn):
+        # for the moment, play it safe and skip anything that appears to
+        # have been run already.
+        continue
+    
+    clean=False
 
-con = sql.connect(fn)
-if use_spatial:
-    con.enable_load_extension(True)
-    con.execute('SELECT load_extension("mod_spatialite");')
-    con.execute('SELECT InitSpatialMetadata()')
+    if clean :
+        os.path.exists(fn) and os.unlink(fn)
+        create=True
+    else:
+        create=not os.path.exists(fn)
 
-if clean:
-    add_grid_to_db(grid,con)
-    init_ptm_tables(con)
+    for run_idx,run_dir in enumerate(run_dirs):
+        run=post.PtmRun(run_dir=run_dir)
+        grid=run.grid()
 
-clean_ptm_tables(con)
+        con = sql.connect(fn)
+        if use_spatial:
+            con.enable_load_extension(True)
+            con.execute('SELECT load_extension("mod_spatialite");')
+            con.execute('SELECT InitSpatialMetadata()')
 
-add_ptm_run_to_db(run,con,grid)
-for group in run.groups():
-    # flow data for assigning particle mass
-    Qfunc=run.get_Qfunc_for_group(group)
+        if run_idx==0:
+            if create:
+                add_grid_to_db(grid,con)
+                init_ptm_tables(con)
+            elif clean:
+                # stale logic
+                clean_ptm_tables(con)
 
-##
+        add_ptm_run_to_db(run,con,grid)
+        # open and close each time to catch IO errors sooner
+        con.commit()
+        con.close()
+
+
