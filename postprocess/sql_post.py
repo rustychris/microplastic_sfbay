@@ -193,7 +193,8 @@ def add_ptm_group_to_db(group,run,run_id,con,curs,grid,z_extractor=None):
     Qfunc=run.get_Qfunc_for_group(group)
     # no negative flows, which can happen with SJ river
     Q=Qfunc(release['time'].values).clip(0,np.inf)
-    
+
+    # HERE - am I missing a divide by 5?
     grp_hour_per_rel=(release['time'].values[1] - release['time'].values[0])/np.timedelta64(3600,'s')
     # m3/s * s/hour * hour/release => m3/release
     volume=Q*3600 * grp_hour_per_rel

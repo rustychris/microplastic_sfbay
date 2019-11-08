@@ -285,8 +285,8 @@ if __name__=="__main__":
     # previously these went to 0.5, consistent with the behaviors.
     # new runs use 0.2
     z_ranges=[
-        ('bed',[0,0.2]),
-        ('surf',[-0.2,0]),
+        ('bed',[0,0.5]),
+        ('surf',[-0.5,0]),
         ('avg',[0,0])
     ]
 
