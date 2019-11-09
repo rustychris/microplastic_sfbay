@@ -12,12 +12,15 @@ from stompy import utils, memoize
 
 import postprocess_v00 as post
 
-def make_load_table_oldrun(con,load_name,load_fn,msg=log.debug):
+def make_load_table_oldrun(con,load_name,load_fn,msg=log.debug,clean=True):
     """
     bring concentrations into db as a temporary, in-memory
     table.
     This version assumes the old runs, where only a small
     number of stormwater sources are included.
+
+    clean: if True, the memory database is started fresh.  otherwise, just
+    add in the one table (replacing it if that specific table already exists)
     
     the new table is in the schema load, with table name = load_name
     """
@@ -88,12 +91,19 @@ def make_load_table_oldrun(con,load_name,load_fn,msg=log.debug):
             conc_rows.append( (group_name,conc) )
         msg(f"{source:15s}  {behavior:9s} => {source_name:15s} {conc:.4f}")
 
-    # --- load that into a table    
+    # --- load that into a table
+    if clean:
+        try:
+            curs.execute("DETACH load")
+        except sql.OperationalError:
+            print("memory table wasn't there.  no worries.")
+        
     try:
-        curs.execute("DETACH load")
+        curs.execute("ATTACH ':memory:' as load")
     except sql.OperationalError:
-        print("memory table wasn't there.  no worries.")
-    curs.execute("ATTACH ':memory:' as load")
+        print("maybe the memory table was already attached?")
+
+    curs.execute(f"""DROP TABLE if exists load.{load_name}""")
 
     curs.execute(f"""CREATE TABLE load.{load_name} (
        group_name text,
