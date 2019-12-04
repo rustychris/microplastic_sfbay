@@ -182,7 +182,12 @@ class PtmRun(object):
     
     @classmethod
     def group_to_src_behavior(cls,group):
-        m=re.match('(.*)_([^_]*)',group)
+        # This used to be enough:
+        # m=re.match('(.*)_([^_]*)',group)
+        # But newest batch of runs includes a release date in the
+        # group name.
+        # optionally match that, too.
+        m=re.match(r'(.*)_(up[0-9]*|down[0-9]*|none)(_rel[0-9]{8})?$',group)
         return m.group(1),m.group(2)
     
     def get_Qdata_for_group(self,group):

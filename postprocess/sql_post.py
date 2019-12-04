@@ -189,12 +189,28 @@ def add_ptm_group_to_db(group,run,run_id,con,curs,grid,z_extractor=None):
     release['group_id']=group_id
     release['epoch']=(release['time'] - pd.Timestamp("1970-01-01")) // pd.Timedelta('1s')
 
+    # Ham-handed fix up of truncated release logs.
+    typical_count=int( np.median( release['count'] ) )
+    bad=release['count']!=typical_count
+    # a little bit smart -- only step in when it's the last step that's
+    # different.
+    if (not np.any(bad[:-1])) and bad[-1]:
+        print("Yikes - release_log might be missing some particles.")
+        print("  Changing reported count of %d to %d"%(release['count'].values[-1],
+                                                       typical_count))
+        print("  And punting on id_max,gid_max")
+        release.loc[bad,'count']=typical_count
+        # careful of inclusive indexes
+        release.loc[bad,'id_max']=release.loc[bad,'id_min']+typical_count-1
+        release.loc[bad,'gid_max']=release.loc[bad,'gid_min']+typical_count-1
+
     # add in volume information.
     Qfunc=run.get_Qfunc_for_group(group)
     # no negative flows, which can happen with SJ river
     Q=Qfunc(release['time'].values).clip(0,np.inf)
 
-    # HERE - am I missing a divide by 5?
+    # Note that the volume is for the full release. Downstream code
+    # must divide by count (i.e. 5) in order to get the per-particle volume.
     grp_hour_per_rel=(release['time'].values[1] - release['time'].values[0])/np.timedelta64(3600,'s')
     # m3/s * s/hour * hour/release => m3/release
     volume=Q*3600 * grp_hour_per_rel
@@ -270,7 +286,7 @@ def add_ptm_group_to_db(group,run,run_id,con,curs,grid,z_extractor=None):
         z_from_surfs.append(part_z_from_surf)
         
         gids.append( parts['id'].copy() )
-        part_ids.append( [ group_gid_to_particle[(group_id,gid)]
+        part_ids.append( [ group_gid_to_particle[(group_id,gid)] 
                            for gid in parts['id'] ] )
         epochs.append( epoch*np.ones(len(parts['id']),np.int32) )
 
@@ -307,106 +323,3 @@ def add_ptm_group_to_db(group,run,run_id,con,curs,grid,z_extractor=None):
         time.sleep(5)
         print("Trying again")
         con.commit()
-        
-##
-
-
-#run=post.PtmRun(run_dir="/opt2/sfb_ocean/ptm/all_source_020/20170715/w0.0")
-#fn=os.path.join(run.run_dir,"ptm_and_grid.db")
-# getting ready for the older runs.
-
-months=[
-    #"/opt2/sfb_ocean/ptm/all_source/20170715",
-    "/opt2/sfb_ocean/ptm/all_source/20170815",
-    "/opt2/sfb_ocean/ptm/all_source/20170915",
-    "/opt2/sfb_ocean/ptm/all_source/20171015",
-    "/opt2/sfb_ocean/ptm/all_source/20171115",
-    "/opt2/sfb_ocean/ptm/all_source/20171215",
-    "/opt2/sfb_ocean/ptm/all_source/20180115",
-    "/opt2/sfb_ocean/ptm/all_source/20180215",
-    "/opt2/sfb_ocean/ptm/all_source/20180315",
-    "/opt2/sfb_ocean/ptm/all_source/20180415",
-    "/opt2/sfb_ocean/ptm/all_source/20180515"
-]
-
-
-for month in months:
-    # Try shoving all of one month into the same database
-    speeds=[
-        "w0.0",
-        "w-0.0005",
-        "w0.0005",
-        "w-0.005",
-        "w0.005",
-        "w-0.05",
-        "w0.05"
-    ]
-    
-    run_dirs=[os.path.join(month,speed)
-              for speed in speeds ]
-
-    fn=os.path.join(month,"ptm_and_grid.db")
-
-    if 0: # building the original databases
-        if os.path.exists(fn):
-            # for the moment, play it safe and skip anything that appears to
-            # have been run already.
-            continue
-
-        clean=False
-
-        if clean :
-            os.path.exists(fn) and os.unlink(fn)
-            create=True
-        else:
-            create=not os.path.exists(fn)
-
-        for run_idx,run_dir in enumerate(run_dirs):
-            run=post.PtmRun(run_dir=run_dir)
-            grid=run.grid()
-
-            con = sql.connect(fn)
-            if use_spatial:
-                con.enable_load_extension(True)
-                con.execute('SELECT load_extension("mod_spatialite");')
-                con.execute('SELECT InitSpatialMetadata()')
-
-            if run_idx==0:
-                if create:
-                    add_grid_to_db(grid,con)
-                    init_ptm_tables(con)
-                elif clean:
-                    # stale logic
-                    clean_ptm_tables(con)
-
-            add_ptm_run_to_db(run,con,grid)
-            # open and close each time to catch IO errors sooner
-            con.commit()
-            con.close()
-
-    if 1: # building index on particle time
-        print(fn)
-        if not os.path.exists(fn):
-            print("Can't build index - %s doesn't exist"%fn)
-            continue
-
-        con = sql.connect(fn)
-        curs=con.cursor()
-        def db(sql,*a,row_limit=5):
-            t=time.time()
-            curs.execute(sql,*a)
-            results=curs.fetchall()
-            elapsed=time.time() -t
-            print("Query time: %.2fs"%elapsed)
-            print("Returned %d rows"%len(results))
-            if row_limit:
-                print(results[:row_limit])
-            else:
-                print(results)
-
-        # index on time?
-        db("CREATE INDEX IF NOT EXISTS particle_time_idx on particle_loc (time);")
-        db("ANALYZE") #
-                
-        con.commit()
-        con.close()

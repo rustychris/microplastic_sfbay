@@ -12,7 +12,9 @@ from stompy import utils, memoize
 
 import postprocess_v00 as post
 
-def make_load_table_oldrun(con,load_name,load_fn,msg=log.debug,clean=True):
+def make_load_table(con,load_name,load_fn,msg=log.debug,clean=True,
+                    stormwater_scale=1/0.33,
+                    wastewater_scale=1/0.70):
     """
     bring concentrations into db as a temporary, in-memory
     table.
@@ -30,7 +32,7 @@ def make_load_table_oldrun(con,load_name,load_fn,msg=log.debug,clean=True):
     curs.execute("select name from ptm_group group by name")
     group_names=curs.fetchall()
 
-    stormwater_scale=1/0.33
+    stormwater_scale=1/0.33 # CHANGE
     wastewater_scale=1/0.70
 
     behavior_to_ws={'down50000':0.05,
@@ -42,7 +44,7 @@ def make_load_table_oldrun(con,load_name,load_fn,msg=log.debug,clean=True):
                     'up50000':-0.05}
 
     # almost everything is stormwater, so just create a default
-    # dicut and explicitly name the non-stormwater.
+    # dict and explicitly name the non-stormwater.
     source_map=defaultdict(lambda:'stormwater')
     source_map['cccsd']='CCCSD'
     source_map['sunnyvale']='SUNN'
@@ -133,7 +135,10 @@ class PtmSet(object):
     databases=[]
     
     # for named z_filters, how thick the layer is
+    # Old Run settings
     z_thickness=0.5
+    stormwater_scale=1/0.33
+    wastewater_scale=1/0.70
 
     def __init__(self,**kw):
         utils.set_keywords(self,kw)
@@ -203,7 +208,6 @@ class PtmSet(object):
         epoch_start=int( utils.to_unix( t_start ) )
         epoch_stop =int( utils.to_unix( t_stop ) )
 
-        # Old runs - use 0.5
         if z_filter is None or z_filter=="all":
             z_filter=""
         elif z_filter=='bed':
@@ -254,8 +258,8 @@ class PtmSet(object):
             return ds
         
         con=self.db_to_con(db)
-        
-        make_load_table_oldrun(con,loads,self.load_fns[loads]) # refactor
+
+        self.setup_loads(con,loads)
 
         curs=con.cursor()
         print("Query")
@@ -291,4 +295,18 @@ class PtmSet(object):
             os.makedirs(cache_folder,exist_ok=True)
             ds.to_netcdf(cache_fn)
         return ds
+
+    def setup_loads(self,con,load_name,table_name=None,**kw):
+        table_name=table_name or load_name
+        make_load_table(con,table_name,self.load_fns[load_name],
+                        stormwater_scale=self.stormwater_scale,
+                        wastewater_scale=self.wastewater_scale,
+                        **kw)
+    
+class PtmSetNew(PtmSet):
+    # for named z_filters, how thick the layer is
+    z_thickness=0.25
+    stormwater_scale=1.0 # or a bit bigger
+    wastewater_scale=1/0.70
+    cache_dir="/opt2/sfb_ocean/ptm/all_source_20b/queries"
     
