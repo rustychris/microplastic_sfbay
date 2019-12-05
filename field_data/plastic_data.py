@@ -107,8 +107,10 @@ sediment_df['field_sample_p']=sediment_df['SampleType']=='FieldSample'
 fish_df['field_sample_p']=( (fish_df['SampleType']=='Field')
                             & (fish_df['StationType_Final']=='Field') )
 
-## 
-    
+
+##
+
+
 combined=pd.concat(dfs,sort=False)
 
 ##

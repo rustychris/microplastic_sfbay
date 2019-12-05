@@ -53,8 +53,8 @@ manta_volumes1.loc[blanks,'TYPE']='Manta - Blank'
 print("This should match the report, with 58 regular, 8 blank, 7 dupe")
 print(manta_volumes1.groupby('TYPE').size())
 
-##
 
+##
 # rather than join by SAMPLE LOCATION, which is not unique,
 # populated SampleIDs on manta_volumes, then join with that.
 
@@ -117,6 +117,54 @@ assert np.all(sample_ids.values),"Some sample ids failed to match a volume"
 
 ##
 
+# For manta data we can also assign times in most cases, based on
+# when the RBR sample was collected.
+manta_rbr=pd.read_excel('../field_data/20180507_RBR_Data_forRustyHolleman_withFieldConditions.xlsx',
+                        sheet_name=0)
+
+# Note that CollectionTimeStart is only the time of day, but it gets read in with
+# a faulty date.
+np_times=[ (t.hour*3600 + t.minute*60)*np.timedelta64(1,'s')
+           for t in manta_rbr.CollectionTimeStart.dt.time.values ]
+
+manta_rbr['time_loc']=manta_rbr.SampleDate.values + np_times
+
+##
+
+# Try to update manta_volumes['DATE'] with times where possible from
+# the RBR data.
+
+# StationCode, SampleDate, CollectionTimeStart, CollectionTimeEnd, SampleID
+# SampleID here includes 'RBR' or CTD', so can't do a straight join.
+
+manta_ids=[]
+import re
+
+for idx,rec in manta_rbr.iterrows():
+    # greedy, so put RBR-1 and RBR-2 first.
+    
+    to_match=re.sub('-(RBR-1|RBR-2|RBR|CTD)-','-Manta-',rec.SampleID)
+    # to_match=rec.SampleID.replace('RBR','Manta').replace('CTD','Manta')
+
+    if to_match in manta_volumes1.SampleID.values:
+        manta_ids.append(to_match)
+        continue
+
+    if ('Manta-DUP' in to_match):
+        to_match=to_match.replace('Manta-DUP','Manta')
+        if to_match in manta_volumes1.SampleID.values:
+            manta_ids.append(to_match)
+            continue
+
+    raise Exception('Failed to match: %s'%to_match)
+
+# In 3 cases these differ, by as much as 3 hours.
+manta_timesA=manta_rbr.groupby(manta_ids)['time_loc'].first()
+manta_timesB=manta_rbr.groupby(manta_ids)['time_loc'].last()
+# take the midpoint
+manta_times=manta_timesA + (manta_timesB- manta_timesA)/2
+
+##
 # 2 manta volumes are missing a match to records.
 # one of those is a blank from SPB3, 2017-11-17. 
 # there are 212 particles from SPB3 on that date, but all from a trawl, no field blank.
@@ -153,6 +201,21 @@ assert manta_volumes1[ manta_volumes1.TYPE.isin(['Manta','Manta - DUP']) ]['LAT 
 # have sample_ids which match the individual particles.
 # each has at least a LAT START, though not necessarily a LAT END
 # 
+
+##
+
+t=manta_times.reindex( manta_volumes1.SampleID )
+
+have_time=(~t.isnull()).values
+
+# When in doubt, figure we sampled mid-day.
+t.iloc[ ~have_time ] = manta_volumes1.DATE.iloc[ ~have_time ].values + np.timedelta64(12,'h')
+
+t_local=t # Assume all times were local.
+t_utc=t.dt.tz_localize('America/Los_Angeles').dt.tz_convert('UTC').dt.tz_localize(None)
+
+manta_volumes1['time_local']=t_local.values
+manta_volumes1['time_utc']=t_utc.values
 
 ## 
 
@@ -316,8 +379,8 @@ for suffix in ['_std','_nofiber']:
     manta_per_sample3['part_per_m3'+suffix]= 1000*manta_per_sample3['count'+suffix] / manta_per_sample3['volume_l']
     manta_per_sample3['part_per_m2'+suffix]= manta_per_sample3['count'+suffix] / manta_per_sample3['area_m2']
 
-    manta_per_sample3['part_per_m3_raw']= 1000*manta_per_sample3['count_preblank'+suffix] / manta_per_sample3['volume_l']
-    manta_per_sample3['part_per_m2_raw']= manta_per_sample3['count_preblank'+suffix] / manta_per_sample3['area_m2']
+    manta_per_sample3['part_per_m3_raw'+suffix]= 1000*manta_per_sample3['count_preblank'+suffix] / manta_per_sample3['volume_l']
+    manta_per_sample3['part_per_m2_raw'+suffix]= manta_per_sample3['count_preblank'+suffix] / manta_per_sample3['area_m2']
 
 ##
 ll=manta_per_sample3.loc[: , ['lon','lat']].values
