@@ -1,3 +1,6 @@
 *.aux
 *.log
 *.out
+*.bbl
+*.blg
+sfbay-microplastic-transport-jgr.pdf
