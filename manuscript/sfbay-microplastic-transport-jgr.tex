@@ -1,0 +1,841 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% AGUJournalTemplate.tex: this template file is for articles formatted with LaTeX
+%
+% This file includes commands and instructions
+% given in the order necessary to produce a final output that will
+% satisfy AGU requirements, including customized APA reference formatting.
+%
+% You may copy this file and give it your
+% article name, and enter your text.
+%
+%% To submit your paper:
+\documentclass[draft]{jgr/agujournal2019}
+\usepackage{url} %this package should fix any errors with URLs in refs.
+\usepackage{lineno}
+\usepackage[inline]{jgr/trackchanges} %for better track changes. finalnew option will compile document with changes incorporated.
+\usepackage{soul}
+\usepackage{marginnote} % comment out on submission
+\linenumbers
+%%%%%%%
+% As of 2018 we recommend use of the TrackChanges package to mark revisions.
+% The trackchanges package adds five new LaTeX commands:
+%
+%  \note[editor]{The note}
+%  \annote[editor]{Text to annotate}{The note}
+%  \add[editor]{Text to add}
+%  \remove[editor]{Text to remove}
+%  \change[editor]{Text to remove}{Text to add}
+%
+% complete documentation is here: http://trackchanges.sourceforge.net/
+%%%%%%%
+
+\draftfalse
+
+%% Enter journal name below.
+%% Choose from this list of Journals:
+%
+% JGR: Atmospheres
+% JGR: Biogeosciences
+% JGR: Earth Surface
+% JGR: Oceans
+% JGR: Planets
+% JGR: Solid Earth
+% JGR: Space Physics
+% Global Biogeochemical Cycles
+% Geophysical Research Letters
+% Paleoceanography and Paleoclimatology
+% Radio Science
+% Reviews of Geophysics
+% Tectonics
+% Space Weather
+% Water Resources Research
+% Geochemistry, Geophysics, Geosystems
+% Journal of Advances in Modeling Earth Systems (JAMES)
+% Earth's Future
+% Earth and Space Science
+% Geohealth
+%
+% ie, \journalname{Water Resources Research}
+
+\journalname{JGR: Oceans}
+
+
+\begin{document}
+
+%% ------------------------------------------------------------------------ %%
+%  Title
+%
+% (A title should be specific, informative, and brief. Use
+% abbreviations only if they are defined in the abstract. Titles that
+% start with general keywords then specific terms are optimized in
+% searches)
+%
+%% ------------------------------------------------------------------------ %%
+
+\title{Microplastic Transport and Fate in Estuarine and Coastal Flows}
+
+%% ------------------------------------------------------------------------ %%
+%
+%  AUTHORS AND AFFILIATIONS
+%
+%% ------------------------------------------------------------------------ %%
+
+% Authors are individuals who have significantly contributed to the
+% research and preparation of the article. Group authors are allowed, if
+% each author in the group is separately identified in an appendix.)
+
+% List authors by first name or initial followed by last name and
+% separated by commas. Use \affil{} to number affiliations, and
+% \thanks{} for author notes.
+% Additional author notes should be indicated with \thanks{} (for
+% example, for current addresses).
+
+% Example: \authors{A. B. Author\affil{1}\thanks{Current address, Antartica}, B. C. Author\affil{2,3}, and D. E.
+% Author\affil{3,4}\thanks{Also funded by Monsanto.}}
+
+\authors{R. C. Holleman\affil{1}\thanks{Current address, HERE},
+  R. Sutton\affil{2},
+  M. Sedlak\affil{2}, and
+  D. Lin\affil{2}}
+
+
+\affiliation{1}{Center for Watershed Sciences, University of California, Davis}
+\affiliation{2}{San Francisco Estuary Instittute}
+
+%% Corresponding Author:
+% Corresponding author mailing address and e-mail address:
+
+% (include name and email addresses of the corresponding author.  More
+% than one corresponding author is allowed in this LaTeX file and for
+% publication; but only one corresponding author is allowed in our
+% editorial system.)
+
+% Example: \correspondingauthor{First and Last Name}{email@address.edu}
+
+\correspondingauthor{Rusty Holleman}{cdholleman@ucdavis.edu}
+
+%% Keypoints, final entry on title page.
+
+%  List up to three key points (at least one is required)
+%  Key Points summarize the main points and conclusions of the article
+%  Each must be 140 characters or fewer with no special characters or punctuation and must be complete sentences
+
+% Example:
+% \begin{keypoints}
+% \item	List up to three key points (at least one is required)
+% \item	Key Points summarize the main points and conclusions of the article
+% \item	Each must be 140 characters or fewer with no special characters or punctuation and must be complete sentences
+% \end{keypoints}
+
+\begin{keypoints}
+\item Predictions of microplastic abundance in an estuary and the adjacent coastal ocean are compared to
+  observations.
+\item Model results capture broad patterns of abundance, and suggest that floating particles remain at
+  the surface for 1 to 2 days.
+\item Sinking particles are retained in the estuary while floating particles are exported to the coastal
+  ocean.
+\end{keypoints}
+
+%% ------------------------------------------------------------------------ %%
+%
+%  ABSTRACT and PLAIN LANGUAGE SUMMARY
+%
+% A good Abstract will begin with a short description of the problem
+% being addressed, briefly describe the new data or analyses, then
+% briefly states the main conclusion(s) and how they are supported and
+% uncertainties.
+
+% The Plain Language Summary should be written for a broad audience,
+% including journalists and the science-interested public, that will not have 
+% a background in your field.
+%
+% A Plain Language Summary is required in GRL, JGR: Planets, JGR: Biogeosciences,
+% JGR: Oceans, G-Cubed, Reviews of Geophysics, and JAMES.
+% see http://sharingscience.agu.org/creating-plain-language-summary/)
+%
+%% ------------------------------------------------------------------------ %%
+
+%% \begin{abstract} starts the second page
+
+\begin{abstract}
+  Microplastic pollution is a growing concern in surface waters, both
+  inland and marine, yet the pathways between terrestrial sources and
+  accumulation in open water and sediment is poorly quantified. This
+  study links microplastic loads in stormwater and wastewater to
+  ambient concentrations in San Francisco Bay and the coastal ocean by
+  means of a three-dimensional hydrodynamic and particle tracking
+  model.  Microscopy and spectoscopy data for collected particles are
+  used to estimate particle settling rates. Particle tracking results
+  bear out the major patterns in the observed concentrations, and
+  suggests a surface persistnce time scale on the order of days,
+  before particles are degraded or fouled and sink from the water
+  surface. Abundance within the Bay is shown to be substantially
+  higher than in the coastal ocean.  Particle buoyancy exerts a strong
+  control on the fate of particles, with negatively buoyant particles
+  effectively trapped within the Bay due to interactions with
+  estuarine circulation.
+\end{abstract}
+
+\section*{Plain Language Summary}
+Microplastic pollution consists of plastic particles less than 5 mm in
+diameter. Concentrations of these particles were measured in
+wastewater and stormwater flows entering San Francisco Bay. A computer
+model simulated how these particles are transported by the tides and
+ocean currents, and predicted concentrations of microplastics
+throughout the Bay and the coastal ocean. Comparison of the model predictions
+with observed concentrations show that the model can explain a substantial
+amount of the observed patterns. The model also shows that almost all
+sinking particles are retained inside the Bay, while some floating particles
+are carried into the coastal ocean and potentially reach nearby
+National Marine Sanctuaries.
+
+%% ------------------------------------------------------------------------ %%
+%
+%  TEXT
+%
+%% ------------------------------------------------------------------------ %%
+
+%%% Suggested section heads:
+% \section{Introduction}
+%
+% The main text should start with an introduction. Except for short
+% manuscripts (such as comments and replies), the text should be divided
+% into sections, each with its own heading.
+
+% Headings should be sentence fragments and do not begin with a
+% lowercase letter or number. Examples of good headings are:
+
+% \section{Materials and Methods}
+% Here is text on Materials and Methods.
+%
+% \subsection{A descriptive heading about methods}
+% More about Methods.
+%
+% \section{Data} (Or section title might be a descriptive heading about data)
+%
+% \section{Results} (Or section title might be a descriptive heading about the
+% results)
+%
+% \section{Conclusions}
+
+
+\section{Introduction}
+  Microplastic pollution is a growing concern in surface waters, both
+  inland and marine, yet the pathways between terrestrial sources and
+  accumulation in open water and sediment is poorly quantified.
+
+  Transport of microparticles and microplastics in surface waters is
+  an essential component of understanding the fate of particles in the
+  environment, and the degree to which microparticles entering surface
+  water systems may be transported downstream and into the open
+  ocean. Microplastic transport modeling in the open ocean has
+  demonstrated the physical processes responsible for mid-ocean
+  accumulation zones, specifically looking at surface-bound, buoyant
+  particles (e.g., Lebreton et al, 2019).
+  % Need a better reference here. Jambeck is about total loads, but
+  % I think she stops shy of a budget
+  Loading studies such as {\bf
+  Jambeck et al} find that the microplastic budgets including
+  estimated loads and open ocean concentrations do not close, and
+  suggest large loss terms somewhere between the point of loading and
+  the open ocean.
+
+  Sutton et al.(2016) found that particles entering San Francisco Bay
+  exhibited a wide variety of characteristics and likely have a wide
+  range of settling velocities.  Studies of sediment transport
+  dynamics suggest that transport and fate of material in an estuarine
+  setting is highly dependent on settling velocities (Williams et al,
+  2004), and only a fully three-dimensional analysis of transport can
+  capture the breadth of relevant mechanisms (Scheu et al, 2015).
+  
+  This study links microplastic loads in stormwater and wastewater to
+  ambient concentrations in San Francisco Bay and the coastal ocean by
+  means of a three-dimensional hydrodynamic and particle tracking
+  model.  Microscopy and spectoscopy data for collected particles are
+  used to estimate particle settling rates. Particle tracking results
+  bear out the major patterns in the observed concentrations, and
+  suggests a surface persistnce time scale on the order of days,
+  before particles are degraded or fouled and sink from the water
+  surface. Abundance within the Bay is shown to be substantially
+  higher than in the coastal ocean.  Particle buoyancy exerts a strong
+  control on the fate of particles, with negatively buoyant particles
+  effectively trapped within the Bay due to interactions with
+  estuarine circulation.
+
+\subsection{San Francisco Bay}
+
+The study area is San Francisco Bay and the adjacent coastal ocean
+including the majority of three National Marine Sanctuaries (Greater
+Farallones, Cordell Bank and Monterey Bay).
+
+% Physical setting
+San Francisco Bay is a mesotidal estuary with mixed diurnal and
+semidiurnal tides, and a great diurnal range of 1.78 m. The Bay is
+composed of two distinct reaches, broadly South Bay and North Bay. The
+southern reach (South Bay) is lagoon-like, with minimal river inflows,
+broad shoals, and a single channel \cite{Conomos1985}.  The northern
+reach (collectively North Bay) includes two distinct embayments, the
+more seaward San Pablo Bay and the landward Suisun Bay, situated
+downstream of the confluence of the Sacramento and San Joaquin
+Rivers. The interaction of the tides and river flows (from the
+Sacramento, San Joaquin and Napa Rivers) maintain North
+Bay as a partially mixed estuary. The Mediterranean climate has a
+distinct wet season, October through April, countered by dry
+conditions in the remainder of the year.
+Dry season freshwater flows into South Bay are primarily from treated wastewater
+discharges, with wet season runoff entering the Bay through
+numerous small tributaries.
+
+% https://water.ca.gov/LegacyFiles/floodmgmt/hafoo/csc/docs/CA_Precipitation_2pager.pdf
+
+\section{Methods}
+
+\subsection{Field Observations}
+
+Microparticle concentrations were measured in stormwater, wastewater,
+ambient surface water, and sediment grab samples.
+
+\subsubsection{Wastewater}
+
+Samples were collected from eight of the forty-two wastewater
+treatment facilities that discharge into San Francisco Bay. The chosen
+facilities represent 70\% of the wastewater discharge into the Bay,
+and are geographically distributed throughout the Bay.
+The facilities vary in treatment capacity from 90 to 630 million liters per day,
+and include secondary treatment processes and in some cases tertiary
+treatment.
+
+Effluent from the facilities was collected in the summer (dry season)
+and fall (wet season) of 2017. Samples were collected during the week
+(Tuesday--Friday) to avoid potential biases due to week/weekend
+variation.  In each case, effluent was run through a flow meter and
+particles were collected in a sieve stack (355 $\mu\textrm{m}$ and 125
+$\mu\textrm{m}$ stainless steel mesh). The sieves were covered during
+sampling to minimize deposition of airborne particles. See
+\citeA{SFEImoore_project} for a full description of the sampling
+methodology.  A field blank was collected at one facility by setting
+out a duplicate sieve stack for the duration of the sampling.  After
+sampling, sieves were sealed in foil for transport to a local
+laboratory where particles were rinsed off of the sieves into glass
+jars with distilled water. Jars were shipped to the University of
+Toronto for further analysis.
+
+In the laboratory samples were dewatered, digested in 20\% KOH for one
+week, rinsed with reverse-osmosis-treated water, and prepared for
+visual microscopy. Particles were visually identified under a
+dissecting microscope as potentially plastic based on color and
+morphology, and a subset of particles were imaged and measured.  The
+first 10 particles within each sample of each color/morphology
+combination were analyzed by Raman/FTIR spectroscopy. In total
+approximately 40\% of the visually identified particles were analyzed
+by spectroscopy.
+
+\subsubsection{Stormwater}
+
+The goal of the stormwater sampling was to characterize microplastic
+loads to the Bay during wet weather runoff events. Twelve small
+tributaries were sampled, representing a variety of land use
+distributions, geographic locations, and drainage area (5--323
+km$^2$).  The sampled tributaries represent 11\% of the drainage area
+emptying into the Bay and 6\% of the small tributary flow (excluding
+Sacramento and San Joaquin rivers and areas above reservoirs).
+
+Tributaries were sampled once each between December 2016 and November
+2018 during runoff events with expected precipitation greater than 1.3
+cm, (the threshold for particle mobilization,
+\citeA{GilbreathMcKee2015}).  Sample collection spanned the rising and
+falling limbs of the hydrograph.  The stormwater was collected through
+tubing connected to a pump, with the free end of the tubing manually
+moved throughout the water column in order to get an approximate
+depth-integrated sample. Care was taken to avoid contact with the bed
+that might draw bed material into the tubing. At one site (Guadalupe
+River) this method was not feasible and samples were collected in a
+bucket lowered into the flow. Between 25 and 295 l were sampled at
+each site, and passed through stacked 355 $\mu\textrm{m}$ and 125
+$\mu\textrm{m}$ sieves. One field blank was collected in a duplicate
+sieve stack that was exposed to the open air for the same periods as
+field sample stack.  Sieves were sealed in foil for transport to a
+local laboratory where particles were rinsed off of the sieves with
+distilled water into glass jars. For sample preservation 10 ml of
+isopropyl alcohol was added to each jar, and the jars then shipped to
+the University of Toronto for further analysis.
+
+In the laboratory, samples were dewatered and sieved at 106
+$\mu\textrm{m}$ and 500 $\mu\textrm{m}$. Particles in the larger size
+class were visual inspected and particles appearing to be plastic
+(based on morphology and color) were extracted manually. Particles
+in the finer sieve were separated from sediment grains by density
+separation in CaCl$_2$ solution.
+
+Particles were sorted by color and morphology, and 39\% of the
+particles were additionally measured and imaged. For each
+morphology
+\marginnote{introduce morphology in introduction}
+10 or 10\% of the particles, whichever was greater, were analyzed
+by FTIR or Raman spectroscopy. Overall, 7\% of the microparticles
+underwent spectroscopy. One notable group of particles, rubbery
+black fragments, were found in large number but could not be
+reliably identified via spectroscopy.
+
+\subsubsection{Surface Water}
+
+Surface water was sampled at 28 sites in San Francisco Bay and
+the adjacent coastal waters. 
+
+Each site was sampled during dry weather (August 21, 2017 to November
+5, 2017) and again during wet weather (November 16, 2017 to March31,
+2018). Wet weather sampling days were timed to follow local
+precipitation events of over 1.3 cm in a 24 hour period. For sites
+within the Bay, sampling was planned for approximately three days
+after the rain event, and for sites in the coastla ocean sampling
+was planned for five to ten days after the rain event. These delays
+were intended to capture the transit time of landborne particles
+to reach the Bay and ocean.
+
+The manta trawl itself is a modified Neuston net with a rectangular
+16~cm tall by 61~cm wide opening, trailed by a 3~m long net with a 335
+$\mu\textrm{m}$ mesh size. The trawl was towed for 30 minutes at each
+site, at a speed below 1.5 m~s$^{-1}$. The area of water sampled was
+calculated as the product of the manta trawl width and the tow
+distance as measured by a General Oceanics, Inc. Model 2030R
+flowmeter.
+% Volume sampled by multiplying by submerged depth of 0.095~m.
+
+Following each tow, the net was rinsed from the outside to collect
+material in the cod end, which was then rinsed into a 355
+$\mu\textrm{m}$ sieve. Sieve contents were transferred to glass jars,
+preserved with approximately 7\% isopropyl alcohol, refrigerated, and
+later shipped to the University of Toronto for laboratory analysis.
+Eight field blanks were collected, each entailing pouring 2 l of
+deionized water through the trawl and following the same transfer
+procedure described above.
+
+% At first, surface water samples were then run through a 212 um sieve,
+% and later this was changed to a stack of 125, 355
+
+The digestion process described for wastewater samples was applied to
+surface water samples only when large quantities of organic material
+were present. After the optional digestion, samples were sorted on a
+glass Petri dish under a dissecting microscope. The first 10 particles
+that appeared to be plastic in each combined color/morphology category
+(i.e.  blue fibers) were transferred to separate dish and affixed with
+double-sided tape. Additional particles beyond those transferred to
+the tape were counted along with their size fraction, color, and
+morphology. Particles on the double-sided tape (32\% of the total
+surface water particles) were imaged and measured.
+
+A subset of the particles that were imaged and measured additionally
+underwent Raman or FTIR spectroscopy (making up 13\% of the surface
+water particles). Due to the large number of fibers, approximately
+half of the samples were analyzed for fibers.
+
+\begin{figure}
+\begin{itemize}
+\item Location of manta trawls
+\item Location of stormwater samples
+\item Location of wastewater samples
+\item If used, location of sediment samples
+\end{itemize}
+% \includegraphics{example.png}
+\caption{Map of the study area and sampling locations}
+\label{overview_map}
+\end{figure}
+
+  
+\subsubsection{Sediment Samples}
+
+{\bf May omit sediment.  TBD.}
+              
+\begin{itemize}
+\item Grabs
+\item Geographic distribution
+\end{itemize}
+
+\subsubsection{Spectroscopy}
+
+Raman and FTIR spectroscopy was employed for a subset of the recovered
+microparticles. Measured spectra were compared to reference libraries
+to discern the chemical composition of the particles.  In cases where
+spectra were dominated by dyes, the identification of the type of dye
+was sometimes enough to categorize the particle composition as synthetic
+versus natural.
+
+\subsubsection{Blank Adjustment}
+
+HERE
+
+\subsection{Hydrodynamic Model}
+
+\subsection{Particle Tracking Model}
+
+\subsection{Particle Concentration Analysis}
+
+\subsubsection{Loads}
+
+\subsubsection{Ambient Concentrations}
+
+
+%%
+
+%  Numbered lines in equations:
+%  To add line numbers to lines in equations,
+%  \begin{linenomath*}
+%  \begin{equation}
+%  \end{equation}
+%  \end{linenomath*}
+
+
+
+%% Enter Figures and Tables near as possible to where they are first mentioned:
+%
+% DO NOT USE \psfrag or \subfigure commands.
+%
+% Figure captions go below the figure.
+% Table titles go above tables;  other caption information
+%  should be placed in last line of the table, using
+% \multicolumn2l{$^a$ This is a table note.}
+%
+%----------------
+% EXAMPLE FIGURES
+%
+% \begin{figure}
+% \includegraphics{example.png}
+% \caption{caption}
+% \end{figure}
+%
+% Giving latex a width will help it to scale the figure properly. A simple trick is to use \textwidth. Try this if large figures run off the side of the page.
+% \begin{figure}
+% \noindent\includegraphics[width=\textwidth]{anothersample.png}
+%\caption{caption}
+%\label{pngfiguresample}
+%\end{figure}
+%
+%
+% If you get an error about an unknown bounding box, try specifying the width and height of the figure with the natwidth and natheight options. This is common when trying to add a PDF figure without pdflatex.
+% \begin{figure}
+% \noindent\includegraphics[natwidth=800px,natheight=600px]{samplefigure.pdf}
+%\caption{caption}
+%\label{pdffiguresample}
+%\end{figure}
+%
+%
+% PDFLatex does not seem to be able to process EPS figures. You may want to try the epstopdf package.
+%
+
+%
+% ---------------
+% EXAMPLE TABLE
+%
+% \begin{table}
+% \caption{Time of the Transition Between Phase 1 and Phase 2$^{a}$}
+% \centering
+% \begin{tabular}{l c}
+% \hline
+%  Run  & Time (min)  \\
+% \hline
+%   $l1$  & 260   \\
+%   $l2$  & 300   \\
+%   $l3$  & 340   \\
+%   $h1$  & 270   \\
+%   $h2$  & 250   \\
+%   $h3$  & 380   \\
+%   $r1$  & 370   \\
+%   $r2$  & 390   \\
+% \hline
+% \multicolumn{2}{l}{$^{a}$Footnote text here.}
+% \end{tabular}
+% \end{table}
+
+%% SIDEWAYS FIGURE and TABLE
+% AGU prefers the use of {sidewaystable} over {landscapetable} as it causes fewer problems.
+%
+% \begin{sidewaysfigure}
+% \includegraphics[width=20pc]{figsamp}
+% \caption{caption here}
+% \label{newfig}
+% \end{sidewaysfigure}
+%
+%  \begin{sidewaystable}
+%  \caption{Caption here}
+% \label{tab:signif_gap_clos}
+%  \begin{tabular}{ccc}
+% one&two&three\\
+% four&five&six
+%  \end{tabular}
+%  \end{sidewaystable}
+
+%% If using numbered lines, please surround equations with \begin{linenomath*}...\end{linenomath*}
+%\begin{linenomath*}
+%\begin{equation}
+%y|{f} \sim g(m, \sigma),
+%\end{equation}
+%\end{linenomath*}
+
+%%% End of body of article
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Optional Appendix goes here
+%
+% The \appendix command resets counters and redefines section heads
+%
+% After typing \appendix
+%
+%\section{Here Is Appendix Title}
+% will show
+% A: Here Is Appendix Title
+%
+%\appendix
+%\section{Here is a sample appendix}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+% Optional Glossary, Notation or Acronym section goes here:
+%
+%%%%%%%%%%%%%%
+% Glossary is only allowed in Reviews of Geophysics
+%  \begin{glossary}
+%  \term{Term}
+%   Term Definition here
+%  \term{Term}
+%   Term Definition here
+%  \term{Term}
+%   Term Definition here
+%  \end{glossary}
+
+%
+%%%%%%%%%%%%%%
+% Acronyms
+%   \begin{acronyms}
+%   \acro{Acronym}
+%   Definition here
+%   \acro{EMOS}
+%   Ensemble model output statistics
+%   \acro{ECMWF}
+%   Centre for Medium-Range Weather Forecasts
+%   \end{acronyms}
+
+%
+%%%%%%%%%%%%%%
+% Notation
+%   \begin{notation}
+%   \notation{$a+b$} Notation Definition here
+%   \notation{$e=mc^2$}
+%   Equation in German-born physicist Albert Einstein's theory of special
+%  relativity that showed that the increased relativistic mass ($m$) of a
+%  body comes from the energy of motion of the body—that is, its kinetic
+%  energy ($E$)—divided by the speed of light squared ($c^2$).
+%   \end{notation}
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+%  ACKNOWLEDGMENTS
+%
+% The acknowledgments must list:
+%
+% >>>>	A statement that indicates to the reader where the data
+% 	supporting the conclusions can be obtained (for example, in the
+% 	references, tables, supporting information, and other databases).
+%
+% 	All funding sources related to this work from all authors
+%
+% 	Any real or perceived financial conflicts of interests for any
+%	author
+%
+% 	Other affiliations for any author that may be perceived as
+% 	having a conflict of interest with respect to the results of this
+% 	paper.
+%
+%
+% It is also the appropriate place to thank colleagues and other contributors.
+% AGU does not normally allow dedications.
+
+
+\acknowledgments
+Enter acknowledgments, including your data availability statement, here.
+
+
+%% ------------------------------------------------------------------------ %%
+%% References and Citations
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+% \bibliography{<name of your .bib file>} don't specify the file extension
+%
+% don't specify bibliographystyle
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\bibliography{references}
+
+
+
+%Reference citation instructions and examples:
+%
+% Please use ONLY \cite and \citeA for reference citations.
+% \cite for parenthetical references
+% ...as shown in recent studies (Simpson et al., 2019)
+% \citeA for in-text citations
+% ...Simpson et al. (2019) have shown...
+%
+%
+%...as shown by \citeA{jskilby}.
+%...as shown by \citeA{lewin76}, \citeA{carson86}, \citeA{bartoldy02}, and \citeA{rinaldi03}.
+%...has been shown \cite{jskilbye}.
+%...has been shown \cite{lewin76,carson86,bartoldy02,rinaldi03}.
+%... \cite <i.e.>[]{lewin76,carson86,bartoldy02,rinaldi03}.
+%...has been shown by \cite <e.g.,>[and others]{lewin76}.
+%
+% apacite uses < > for prenotes and [ ] for postnotes
+% DO NOT use other cite commands (e.g., \citet, \citep, \citeyear, \nocite, \citealp, etc.).
+%
+
+
+
+\end{document}
+
+
+
+% More Information and Advice:
+
+%% ------------------------------------------------------------------------ %%
+%
+%  SECTION HEADS
+%
+%% ------------------------------------------------------------------------ %%
+
+% Capitalize the first letter of each word (except for
+% prepositions, conjunctions, and articles that are
+% three or fewer letters).
+
+% AGU follows standard outline style; therefore, there cannot be a section 1 without
+% a section 2, or a section 2.3.1 without a section 2.3.2.
+% Please make sure your section numbers are balanced.
+% ---------------
+% Level 1 head
+%
+% Use the \section{} command to identify level 1 heads;
+% type the appropriate head wording between the curly
+% brackets, as shown below.
+%
+%An example:
+%\section{Level 1 Head: Introduction}
+%
+% ---------------
+% Level 2 head
+%
+% Use the \subsection{} command to identify level 2 heads.
+%An example:
+%\subsection{Level 2 Head}
+%
+% ---------------
+% Level 3 head
+%
+% Use the \subsubsection{} command to identify level 3 heads
+%An example:
+%\subsubsection{Level 3 Head}
+%
+%---------------
+% Level 4 head
+%
+% Use the \subsubsubsection{} command to identify level 3 heads
+% An example:
+%\subsubsubsection{Level 4 Head} An example.
+%
+%% ------------------------------------------------------------------------ %%
+%
+%  IN-TEXT LISTS
+%
+%% ------------------------------------------------------------------------ %%
+%
+% Do not use bulleted lists; enumerated lists are okay.
+% \begin{enumerate}
+% \item
+% \item
+% \item
+% \end{enumerate}
+%
+%% ------------------------------------------------------------------------ %%
+%
+%  EQUATIONS
+%
+%% ------------------------------------------------------------------------ %%
+
+% Single-line equations are centered.
+% Equation arrays will appear left-aligned.
+
+Math coded inside display math mode \[ ...\]
+ will not be numbered, e.g.,:
+ \[ x^2=y^2 + z^2\]
+
+ Math coded inside \begin{equation} and \end{equation} will
+ be automatically numbered, e.g.,:
+ \begin{equation}
+ x^2=y^2 + z^2
+ \end{equation}
+
+
+% To create multiline equations, use the
+% \begin{eqnarray} and \end{eqnarray} environment
+% as demonstrated below.
+\begin{eqnarray}
+  x_{1} & = & (x - x_{0}) \cos \Theta \nonumber \\
+        && + (y - y_{0}) \sin \Theta  \nonumber \\
+  y_{1} & = & -(x - x_{0}) \sin \Theta \nonumber \\
+        && + (y - y_{0}) \cos \Theta.
+\end{eqnarray}
+
+%If you don't want an equation number, use the star form:
+%\begin{eqnarray*}...\end{eqnarray*}
+
+% Break each line at a sign of operation
+% (+, -, etc.) if possible, with the sign of operation
+% on the new line.
+
+% Indent second and subsequent lines to align with
+% the first character following the equal sign on the
+% first line.
+
+% Use an \hspace{} command to insert horizontal space
+% into your equation if necessary. Place an appropriate
+% unit of measure between the curly braces, e.g.
+% \hspace{1in}; you may have to experiment to achieve
+% the correct amount of space.
+
+
+%% ------------------------------------------------------------------------ %%
+%
+%  EQUATION NUMBERING: COUNTER
+%
+%% ------------------------------------------------------------------------ %%
+
+% You may change equation numbering by resetting
+% the equation counter or by explicitly numbering
+% an equation.
+
+% To explicitly number an equation, type \eqnum{}
+% (with the desired number between the brackets)
+% after the \begin{equation} or \begin{eqnarray}
+% command.  The \eqnum{} command will affect only
+% the equation it appears with; LaTeX will number
+% any equations appearing later in the manuscript
+% according to the equation counter.
+%
+
+% If you have a multiline equation that needs only
+% one equation number, use a \nonumber command in
+% front of the double backslashes (\\) as shown in
+% the multiline equation above.
+
+% If you are using line numbers, remember to surround
+% equations with \begin{linenomath*}...\end{linenomath*}
+
+%  To add line numbers to lines in equations:
+%  \begin{linenomath*}
+%  \begin{equation}
+%  \end{equation}
+%  \end{linenomath*}
+
+
+
