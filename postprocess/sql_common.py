@@ -32,9 +32,6 @@ def make_load_table(con,load_name,load_fn,msg=log.debug,clean=True,
     curs.execute("select name from ptm_group group by name")
     group_names=curs.fetchall()
 
-    stormwater_scale=1/0.33 # CHANGE
-    wastewater_scale=1/0.70
-
     behavior_to_ws={'down50000':0.05,
                     'down5000':0.005,
                     'down500':0.0005,
@@ -308,5 +305,5 @@ class PtmSetNew(PtmSet):
     z_thickness=0.25
     stormwater_scale=1.0 # or a bit bigger
     wastewater_scale=1/0.70
-    cache_dir="/opt2/sfb_ocean/ptm/all_source_20b/queries"
+    cache_dir="/opt2/sfb_ocean/ptm/all_source_020b/queries"
     
