@@ -1,3 +1,7 @@
+"""
+v02: try to refactor, process stormwater and effluent at the same time.
+process each category independently, sum at the end.
+"""
 import os
 import re
 
@@ -129,12 +133,12 @@ sample_volume_patts={
 for cat_version in [
         None, # standard
         # "nofiber",
-        # "fiber",
-        # "fiber_bundle",
-        # "film",
-        # "foam",
-        # "fragment",
-        # "sphere"
+        "fiber",
+        "fiber_bundle",
+        "film",
+        "foam",
+        "fragment",
+        "sphere"
 ]:
     print(f"----------------------{cat_version}----------------")
     ds=xr.Dataset()
