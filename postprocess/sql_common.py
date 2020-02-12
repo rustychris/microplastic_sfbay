@@ -122,7 +122,14 @@ class PtmSet(object):
     # a proper grid
     base_ptm_run_dir="/opt2/sfb_ocean/ptm/all_source/20170715/w0.0"
     load_fns={'std':"../loads/plastic_loads-7classes-v03.nc",
-              'nofiber':"../loads/plastic_loads-7classes-v03-nofiber.nc"}
+              'nofiber':"../loads/plastic_loads-7classes-v03-nofiber.nc",
+              'fiber':"../loads/plastic_loads-7classes-v03-fiber.nc",
+              'fiber_bundle':"../loads/plastic_loads-7classes-v03-fiber_bundle.nc",
+              'film':"../loads/plastic_loads-7classes-v03-film.nc",
+              'foam':"../loads/plastic_loads-7classes-v03-foam.nc",
+              'fragment':"../loads/plastic_loads-7classes-v03-fragment.nc",
+              'sphere':"../loads/plastic_loads-7classes-v03-sphere.nc"
+    }
     
     # new-ish runs
     # "/opt2/sfb_ocean/ptm/all_source_020/20170715/w0.0"
