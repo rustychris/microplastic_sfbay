@@ -342,8 +342,30 @@ ds['source_pathway']=('source',), sps
 
 # broadcast to source,category
 blank_rates=ds['blank_rate'].loc[ ds.source_pathway ]
-#          source, category, w_s
-ds['conc']=ds['conc_raw'] - blank_rates * ds.n_samples
+
+# Maybe?
+# for example conc_raw says we sampled 100l from EBDA, found 10 passive fibers =>
+# conc_raw[ebda,fiber,0.0] = 0.1 particle / l
+# across all w_s, ebda had 80 fibers...
+# the average wastewater blank found 20 fibers => blank_rates[ebda,fiber]=20
+# the ebda data came from 2 samples: n_samples[ebda]=2
+# so across all w_s, the blank concentration is 20 * 2 / 100
+ds['conc_blank']= blank_rates*ds.n_samples/ds.total_volume
+# Verified in dev that these are mostly positive.
+
+ds['blank_derate']=(ds.conc_raw.sum(dim='w_s')-ds.conc_blank)/ds.conc_raw.sum('w_s')
+# when a source,category combination has no field particles and no blank particles,
+# blank_derate is nan. give it the benefit of the doubt and call it 1.0.
+ds['blank_derate'].values=np.nan_to_num(ds['blank_derate'].values.clip(0),nan=1.0)
+ds['conc']=ds.conc_raw * ds.blank_derate
+
+## The rest is cleanup, tidying for output
+# Drop the nan source
+source_sel=np.array( [isinstance(s,str) for s in ds.source.values] )
+ds=ds.isel(source=source_sel)
+# cast the objects to unicode string
+for obj_fld in ['pathway','category','source']:
+    ds[obj_fld].values = ds[obj_fld].values.astype('U')
 
 # add some metadata to help with poor memory...
 ds.conc.attrs['units']='particle l-1'
@@ -360,4 +382,4 @@ out_fn=f'plastic_loads-7classes-{version}.nc'
 os.path.exists(out_fn) and os.unlink(out_fn)
 ds.to_netcdf(out_fn)
 
-df_out.to_excel(out_fn.replace('.nc','.xlsx'))
+# df_out.to_excel(out_fn.replace('.nc','.xlsx'))
