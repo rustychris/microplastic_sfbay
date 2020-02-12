@@ -460,20 +460,173 @@ spectra were dominated by dyes, the identification of the type of dye
 was sometimes enough to categorize the particle composition as synthetic
 versus natural.
 
-\subsubsection{Blank Adjustment}
-
-HERE
-
 \subsection{Hydrodynamic Model}
+
+A three-dimensional hydrodynamic model was developed that includes San
+Francisco Bay and the adjacent coastal ocean. The model platform is
+SUNTANS \cite{Fringer2006}, which has been successfully applied in
+numerous San Francisco Bay applications
+\cite{ChuaFringer2011,HollemanStacey2014}, as well as coupled to ocean
+circulation models \cite{Rayson2018}. The model utilizes z-layers,
+configured to smoothly stretch from a layer thickness of 0.4~m at the
+surface to 460~m at the bed in the deepest regions of the domain.
+This range of layer thicknesses allows for
+adequate resolution of flow on the intertidal mudflats of San
+Francisco Bay while maintaining feasible computational complexity
+in regions with depths reaching 4000~m.  The unstructured grid
+has a horizontal resolution of 15--800~m within the Bay, and joins
+a 2000~m rectilinear grid covering the coastal ocean.
+
+Freshwater flows are input to the model domain from the Sacramento-San
+Joaquin Delta, treated wastewater outfalls, and local tributaries. Delta
+inflows are taken from USGS gauge data at Rio Vista (USGS \#11455420),
+Threemile Slough (USGS \#11337080), San Joaquin River at Jersey Point (USGS \#11337190),
+and Dutch Slough (USGS \#11313433).
+\marginnote{A full accounting of inflows from the Delta would require the addition
+  of data from Threemile Slough and Dutch Slough.  Particle tracking is
+  underway. Results will have to updated with that run when it completes.
+}
+The 72 largest local tributary flows into the San Franciscco Estuary
+are included in the model. Where available, USGS flow gauge data is used. For
+ungauged tributaries, nearby flow gauges are used and scaled by watershed area.
+Wastewater outfall flows are taken from data where available and from a
+seasonal climatology when daily flow data was not available \cite{SFEImodel_validation}.
+
+The ocean boundary was coupled to a superposition of non-tidal HYCOM
+(www.hycom.org) output and tides generated from the PO2009 OTPS
+solution \cite{Egbert2002}. Salinity and temperature were taken from
+HYCOM. Tidal fluxes from OTPS were added uniformly in the vertical to
+the non-tidal, vertically varying fluxes from HYCOM.  Following the
+approach of \cite{Rayson2018}, portions of the ocean boundary near
+shore (in our case, the five edges nearest the shoreline)
+were forced by setting the free surface elevation, while the
+remainder of the edges were forced by specifying three-dimensional
+fluxes.
+%
+Prescribing fluxes at deep portions of the ocean boundary constrains erroneous
+baroclinic flows when there are mismatches in density between inflow
+and outflow at the ocean boundary. Setting the free surface for a
+subset of the boundary edges keeps the mean free surface elevation in
+the model from drifting due to slight errors in net fluxes.
+
+% Would have to go back and do the real calculations. Might not have
+% these runs around any more.  From the plots in the stanford
+% presentation.. looks about like 0.05cm vs. 0.10m.
+% Tests showed that over 15 days the RMSE for the freesurface at a gauge
+% inside the Bay with no freesurface forcing was {\bf X} compared to an
+% error of {\bf Y} when near shore edges were forced by setting the free
+% surface.
+
+
+\begin{figure}
+  \includegraphics{figures/twopanel-overview.png}
+  \caption{Hydrodynamic model domain}
+  \label{model_domain}
+\end{figure}
+
+\begin{table}
+  \caption{Model skill, water level}
+  \label{model_skill}
+  \centering
+  \begin{tabular}{lrrr}
+    \hline
+        {} &  Amp & Lag (min) & Pearson \\
+        Station      &      &           &         \\
+        \hline
+        Alameda      & 1.01 &     -14.2 &   0.984 \\
+        Point Reyes  & 0.97 &     -19.0 &   0.978 \\
+        Fort Point   & 0.98 &     -17.0 &   0.980 \\
+        Coyote Creek & 0.91 &       1.3 &   0.984 \\
+        Richmond     & 1.00 &     -17.4 &   0.980 \\
+        Port Chicago & 1.29 &     -30.0 &   0.948 \\
+        \hline
+  \end{tabular}
+\end{table}
+
 
 \subsection{Particle Tracking Model}
 
+The FISH-PTM offline particle tracking model \cite{Ketefian2015}
+was used for integrating particle transport. All particles were
+assigned a constant horizontal diffusion coefficient of
+0.5~$\textrm{m}^2 \textrm{s}^{-1}$.  Each of the 8 sampled wastewater outfalls,
+and the 15 largest stormwater sources were included as particle sources.
+For each particle source, seven settling velocities were modeled: -0.05,
+-0.005, -0.0005, 0, 0.0005, 0.005, and 0.05 ~$\textrm{m} \textrm{s}^{-1}$.
+Each source/settling velocity combination had a constant 10 particles/hour
+loading rate, and all particles were tracked for at least 20 days.
+\marginnote{the runs are slow, but this seems like a very small
+  number of particles}
+
 \subsection{Particle Concentration Analysis}
+
+
+
+\subsubsection{Blank Adjustment}
+
+Field and laboratory blank samples revealed non-negligibile levels
+of sample contamination in the various matrices.
 
 \subsubsection{Loads}
 
 \subsubsection{Ambient Concentrations}
 
+\section{Results}
+
+
+\subsection{Concentration in Central Bay}
+
+{\em Hopefully this is actually borne out in the model}
+
+
+\subsection{Loss from Surface}
+
+Particle tracking results yielded the best correlation with and least
+bias relative to surface trawl data when particles were removed from
+the surface with a characteristic time scale of approximately two
+days.  This loss time scale is on the short end of literature values
+\marginnote{REFs}. Surface attrition is thought to occur through
+combined processes of fragmentation and biofouling.  We compared size
+distributions of particles in the Bay versus in the coastal ocean to
+infer the relative importance of the two processes.  The underlying
+assumptions are that Bay-sourced particles dominate any coastal
+sources of particles, and that biofouling preferentially affects small
+particles with large surface areas.  Figure \ref{surface_size_distributions}
+shows histograms and associated kernel density estimates for the
+major diameter of particles in surface water samples. The distributions
+show that size distribution of fibers and fragments is unchanged as particles
+move from the Bay to the ocean, while for films and foams the 
+distribution shifts to larger lengths in the ocean. This
+points to a winnowing of readily biofouled particles in the Bay, and on
+a timescale that is not significantly longer than the Bay--coast transit time.
+
+The comparison is not conclusive, though, and could also be explained
+by the preferential transport of larger, more buoyant particles into the
+coastal ocean as they ride nearer to the surface than marginally buoyant
+particles.
+
+\begin{figure}
+  \includegraphics{figures/manta-bay_vs_coast-length_distribution.png}
+  \caption{Particle length distributions from surface samples in the Bay and
+    coastal ocean.}
+  \label{surface_size_distributions}
+\end{figure}
+
+Validation ideas:
+\begin{itemize}
+  \item Alice reports greater concentrations in Central Bay surface
+    water than in South Bay. Does the model capture this?
+\end{itemize}
+
+
+% recommended statement from
+% https://www.hycom.org/publications/acknowledgements/hycom-data
+Funding for the development of HYCOM has been provided by the National
+Ocean Partnership Program and the Office of Naval Research. Data
+assimilative products using HYCOM are funded by the
+U.S. Navy. Computer time was made available by the DoD High
+Performance Computing Modernization Program. The output is publicly
+available at http://hycom.org.
 
 %%
 
