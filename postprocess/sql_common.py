@@ -12,6 +12,14 @@ from stompy import utils, memoize
 
 import postprocess_v00 as post
 
+behavior_to_ws={'down50000':0.05,
+                'down5000':0.005,
+                'down500':0.0005,
+                'none':0.0,
+                'up500':-0.0005,
+                'up5000':-0.005,
+                'up50000':-0.05}
+
 def make_load_table(con,load_name,load_fn,msg=log.debug,clean=True,
                     stormwater_scale=1/0.33,
                     wastewater_scale=1/0.70):
@@ -31,14 +39,6 @@ def make_load_table(con,load_name,load_fn,msg=log.debug,clean=True,
     curs=con.cursor()
     curs.execute("select name from ptm_group group by name")
     group_names=curs.fetchall()
-
-    behavior_to_ws={'down50000':0.05,
-                    'down5000':0.005,
-                    'down500':0.0005,
-                    'none':0.0,
-                    'up500':-0.0005,
-                    'up5000':-0.005,
-                    'up50000':-0.05}
 
     # almost everything is stormwater, so just create a default
     # dict and explicitly name the non-stormwater.
@@ -313,4 +313,7 @@ class PtmSetNew(PtmSet):
     stormwater_scale=1.0 # or a bit bigger
     wastewater_scale=1/0.70
     cache_dir="/opt2/sfb_ocean/ptm/all_source_020b/queries"
+    # just a representative PTM run
+    base_ptm_run_dir="/opt2/sfb_ocean/ptm/all_source_020b/Alameda_Creek/20170720"
+
     
