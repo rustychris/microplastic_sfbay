@@ -1,7 +1,7 @@
 """
 v02: use hydrology_matchup to come with a better landuse distribution
 """
-
+import numpy as np
 import pandas as pd
 from stompy.spatial import wkb2shp
 
