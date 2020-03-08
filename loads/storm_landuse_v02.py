@@ -149,7 +149,8 @@ sun_to_watershed=[
     ("Montezuma_Slo",'Montezuma Slough Grizzly'),
     ("Montezuma_Slo_1ser",'Montezuam Slough Sac'), 
     ("Sonoma_Creek",'Sonoma Creek'),
-    ("Sulphur_Sprin", 'Sulphur Springs Creek'),
+    # This one is pretty bogus.  Not sure why the watersheds match so poorly here.
+    ("Sulphur_Sprin", 'Sulphur Springs Creek'), 
     ("San_Francisqu",'San Francisquito'),
     ("Napa_River",'Napa River'),
     # Near Mallard Slough
@@ -178,6 +179,23 @@ hydro_match=wkb2shp.shp2geom('../../sfb_ocean/suntans/grid-merge-suisun/hydrolog
 ## 
 storm_ptm_to_rwsm={}
 
+# have to deal with a few names that were changed along the way
+# i.e. the shapefile I have, with its newName2 field, doesn't
+# 100% match the RWSM pollutant spreadsheet.
+remap_names={
+    'UpperNapaRiver':'NapaRiver',
+    'UpperSonomaCreek':'SonomaCreek',
+    'AlamedaCreek1':'AlamedaCreek',
+    # these are more of a guess.  Luckily they are all quite small.  OK to ignore
+    'AC_unk05':'AC_unk04',
+    'AC_unk06':'AC_unk04',
+    'AC_unk12':'AC_unk10',
+    'AC_unk19':'AC_unk16',
+    'AC_unk30':'AC_unk26A',
+    'CullCreek':'SanLorenzoCreek',
+    'SMC_unk13':'PoplarCreek'
+}
+
 for i in range(len(hydro_match)):
     inflow=hydro_match['inflow'][i]
     if inflow not in watershed_to_ptm:
@@ -187,16 +205,18 @@ for i in range(len(hydro_match)):
     if short not in storm_ptm_to_rwsm:
         storm_ptm_to_rwsm[short]=[]
     name=hydro_match['newName2'][i]
+    name=remap_names.get(name,name)
+    
     assert name.strip()
     storm_ptm_to_rwsm[short].append( name )
 
 for k in storm_ptm_to_rwsm:
     assert k
     print(f"{k}")
-    for r in storm_to_rwsm[k]:
+    for r in storm_ptm_to_rwsm[k]:
         print(f"  {r}")
 
-## 
+#
 
 # I have 72-ish inflows in the SF Bay model.
 # 21+ of those have PTM sources.
@@ -227,9 +247,6 @@ for k in storm_ptm_to_rwsm:
 #   Like I, but rather than a single amp_sun_to_ptm based on suntans areas, use
 #   RWSM areas.
 
-
-##
-
 # For each of the PTM sources, aggregate the land use fractions
 # from the RWSM regions, scale by landuse_coeffs, and write out to
 # csv
@@ -237,14 +254,42 @@ for k in storm_ptm_to_rwsm:
 df_lump['area']=df['Tot. Area (km2)']
 df_lump_by_name=df_lump.set_index( df['Watershed'])
 
-## 
+
+#
+
+# check for any additional remapping...
+pollutant_watersheds=df['Watershed'].values
+hydro_watersheds=[remap_names.get(h,h) for h in hydro_match['newName2']]
+
+print(np.setdiff1d( hydro_watersheds, pollutant_watersheds))
+# ['AC_unk05' 'AC_unk06' 'AC_unk12' 'AC_unk19' 'AC_unk30' 'CullCreek'
+#  'SMC_unk13']
+# These are watersheds that the shapefile has, but are not in the Pollutant Spreadsheet
+
+print(np.setdiff1d( pollutant_watersheds,hydro_watersheds))
+# ['RodeoCreek12']
+# These are watersheds that are in the pollutant spreadsheet, but not in
+# the shapefile.
+
+##
+inflows=wkb2shp.shp2geom('../../sfb_ocean/suntans/grid-merge-suisun/watershed_inflow_locations.shp')
+
+##
+mi2_to_km2=2.5899881
+
+# 1.214 -- not too bad.
+total_inflow_to_rwsm = inflows['area_sq_mi'].sum() * mi2_to_km2 / df['Tot. Area (km2)'].sum()
+
 recs=[]
-for ptm_src,rwsm_watersheds in storm_ptm_to_rwsm.items():
-    break
+for i,(ptm_src,rwsm_watersheds) in enumerate(storm_ptm_to_rwsm.items()):
     rec=dict(source=ptm_src)
     
     rec['rwsm_regions']="|".join(rwsm_watersheds)
 
+    # check to make sure all rwsm_watersheds appear in df_lump:
+    for rw in rwsm_watersheds:
+        assert rw in df_lump_by_name.index,"%s is not in pollutant spreadsheet"%rw
+        
     rwsm_lumped = df_lump_by_name.loc[ rwsm_watersheds, :]
 
     areas=rwsm_lumped['area']
@@ -255,9 +300,30 @@ for ptm_src,rwsm_watersheds in storm_ptm_to_rwsm.items():
     fracs=fracs/fracs.sum()
     net_coeff=(fracs*landuse_coeffs[lu_types].values).sum()
     rec['net_coeff']=net_coeff
+    
+    watershed=ptm_to_watershed[rec['source']]
+    inflow_i=np.nonzero( inflows['name']==watershed )[0][0]
+    inflow_area_mi2=inflows['area_sq_mi'][inflow_i]
+    rec['inflow_area_km2']=mi2_to_km2 * inflow_area_mi2
+    rec['rwsm_area_km2']=areas.sum()
     recs.append(rec)
 
-## 
-stormwater_concs=pd.DataFrame(recs)
+concs=pd.DataFrame(recs)
 
-stormwater_concs.to_csv('stormwater_concs-v01.csv',index=False)
+# Scale individual inflows up by their respective RWSM area
+per_inflow_factor=concs['rwsm_area_km2'] / concs['inflow_area_km2']
+# And scale globally by the fraction of total area that has ptm sources
+# 1.308 -- not too bad!
+global_factor = df['Tot. Area (km2)'].sum() / concs['rwsm_area_km2'].sum() 
+
+concs['net_coeff_scaled']=concs['net_coeff'] * per_inflow_factor * global_factor
+
+
+# So now the net_coeff_scaled here accounts for
+# (a) landuse variability,
+# (b) the difference between watershed areas in the suntans forcing and the areas
+#     in the RWSM
+# (c) the fact that only a subset of watersheds are represented with PTM sources.
+
+# This will have to get updated as new sources get PTM runs.
+concs.to_csv('stormwater_concs-v01.csv',index=False)
