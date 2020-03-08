@@ -147,7 +147,7 @@ sun_to_watershed=[
     # but is more like Denverton.
     # potential RWSM matches: GrizzlyIsland,
     ("Montezuma_Slo",'Montezuma Slough Grizzly'),
-    ("Montezuma_Slo_1ser",'Montezuam Slough Sac'), 
+    ("Montezuma_Slo_1ser",'Montezuma Slough Sac'), 
     ("Sonoma_Creek",'Sonoma Creek'),
     # This one is pretty bogus.  Not sure why the watersheds match so poorly here.
     ("Sulphur_Sprin", 'Sulphur Springs Creek'), 
@@ -197,9 +197,11 @@ remap_names={
 }
 
 for i in range(len(hydro_match)):
-    inflow=hydro_match['inflow'][i]
+    inflow=hydro_match['inflowptm'][i]
+    print(inflow)
     if inflow not in watershed_to_ptm:
         # Not a PTM source
+        print(f"Skipping inflow named {inflow}")
         continue
     short=watershed_to_ptm[inflow]
     if short not in storm_ptm_to_rwsm:
@@ -216,7 +218,7 @@ for k in storm_ptm_to_rwsm:
     for r in storm_ptm_to_rwsm[k]:
         print(f"  {r}")
 
-#
+## 
 
 # I have 72-ish inflows in the SF Bay model.
 # 21+ of those have PTM sources.
