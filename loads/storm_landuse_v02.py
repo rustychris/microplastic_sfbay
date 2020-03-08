@@ -256,20 +256,17 @@ df_lump_by_name=df_lump.set_index( df['Watershed'])
 
 
 #
-
+print()
 # check for any additional remapping...
 pollutant_watersheds=df['Watershed'].values
 hydro_watersheds=[remap_names.get(h,h) for h in hydro_match['newName2']]
 
+print("Watersheds that the shapefile has, but are not in the Pollutant Spreadsheet")
 print(np.setdiff1d( hydro_watersheds, pollutant_watersheds))
-# ['AC_unk05' 'AC_unk06' 'AC_unk12' 'AC_unk19' 'AC_unk30' 'CullCreek'
-#  'SMC_unk13']
-# These are watersheds that the shapefile has, but are not in the Pollutant Spreadsheet
 
+print("Watersheds that are in the pollutant spreadsheet, but not in the shapefile.")
 print(np.setdiff1d( pollutant_watersheds,hydro_watersheds))
 # ['RodeoCreek12']
-# These are watersheds that are in the pollutant spreadsheet, but not in
-# the shapefile.
 
 ##
 inflows=wkb2shp.shp2geom('../../sfb_ocean/suntans/grid-merge-suisun/watershed_inflow_locations.shp')
