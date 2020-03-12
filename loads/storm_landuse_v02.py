@@ -136,37 +136,42 @@ total_adj=df_lump.industrial+df_lump.transportation+df_lump.commercial+df_lump.r
 # These are just the PTM sources
 sun_to_watershed=[
     ("Alameda_Creek","Alameda Creek"),
-    ("Guadalupe_Slo","Guadalupe Slough"),
-    ("San_Pablo_Cre",'San Pablo Creek'),
-    ("Stevens_Creek",'Stevens Creek'),
-    ("Matadero_and_",'Matadero and Adobe Creek'), 
-    ("Petaluma_Rive",'Petaluma River'),
-    ("Suisun_Slough",'Suisun Slough'),
+    ("Arroyo_del_Ha","Arroyo del Hambra"), # v02
     ("Coyote_Creek_",'Coyote Creek, Santa Clara'),
+    ("Glen_Echo_Cre",'Glen Echo Creek'),
+    ("Guadalupe_Slo","Guadalupe Slough"),
+    ("Guadalupe_Riv",'Guadalupe River'),
+    ("Hastings_Slo",'Hastings Slough'), # v02
+    # ("Islais_Creek","Islais Creek"), # no loading -- SF combined
+    ("Matadero_and_",'Matadero and Adobe Creek'),
+    ("Meeker_Slough","Meeker Slough"), # v02
     # One of these is the Grizzly side, the other is labeled Sac side,
     # but is more like Denverton.
-    # potential RWSM matches: GrizzlyIsland,
     ("Montezuma_Slo",'Montezuma Slough Grizzly'),
     ("Montezuma_Slo_1ser",'Montezuma Slough Sac'), 
+    ("Napa_River",'Napa River'),
+    ("Old_Alameda_C",'Old Alameda Creek'),
+    ("Pacheco_Creek",'Pacheco Creek'), 
+    ("Petaluma_Rive",'Petaluma River'),
+    ("Pinole_Creek",'Pinole Creek'),# v02
+    ("Redwood_Creek",'Redwood Creek'), # v02
+    ("San_Francisqu",'San Francisquito'),
+    ("San_Leandro_C",'San Leandro Creek'),
+    ("San_Lorenzo_C",'San Lorenzo Creek'),
+    ("San_Pablo_Cre",'San Pablo Creek'),
     ("Sonoma_Creek",'Sonoma Creek'),
+    ("Steinberger_S", 'Steinberger Slough'),
+    ("Stevens_Creek",'Stevens Creek'),
+    ("Suisun_Slough",'Suisun Slough'),
     # This one is pretty bogus.  Not sure why the watersheds match so poorly here.
     ("Sulphur_Sprin", 'Sulphur Springs Creek'), 
-    ("San_Francisqu",'San Francisquito'),
-    ("Napa_River",'Napa River'),
     # Near Mallard Slough
     # from https://www.cccleanwater.org/watersheds/watersheds-in-contra-costa-county,
     # maybe Willow or Mt Diablo? not a choice
     # http://cocowaterweb.org/wp-content/uploads/Watershed-Atlas.pdf
     # no additional names.
     ("unnamed07",'unnamed07'),
-    ("Glen_Echo_Cre",'Glen Echo Creek'),
-    ("Old_Alameda_C",'Old Alameda Creek'),
-    ("San_Leandro_C",'San Leandro Creek'),
     ("unnamed08",'unnamed08'), 
-    ("Guadalupe_Riv",'Guadalupe River'),
-    ("Pacheco_Creek",'Pacheco Creek'), 
-    ("San_Lorenzo_C",'San Lorenzo Creek'),
-    ("Steinberger_S", 'Steinberger Slough')
 ]
 
 ptm_to_watershed={a:b for a,b in sun_to_watershed}
@@ -325,4 +330,4 @@ concs['net_coeff_scaled']=concs['net_coeff'] * per_inflow_factor * global_factor
 # (c) the fact that only a subset of watersheds are represented with PTM sources.
 
 # This will have to get updated as new sources get PTM runs.
-concs.to_csv('stormwater_concs-v01.csv',index=False)
+concs.to_csv('stormwater_concs-v02.csv',index=False)
