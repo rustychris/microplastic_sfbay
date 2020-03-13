@@ -141,7 +141,7 @@ sun_to_watershed=[
     ("Glen_Echo_Cre",'Glen Echo Creek'),
     ("Guadalupe_Slo","Guadalupe Slough"),
     ("Guadalupe_Riv",'Guadalupe River'),
-    ("Hastings_Slo",'Hastings Slough'), # v02
+    ("Hastings_Slou",'Hastings Slough'), # v02
     # ("Islais_Creek","Islais Creek"), # no loading -- SF combined
     ("Matadero_and_",'Matadero and Adobe Creek'),
     ("Meeker_Slough","Meeker Slough"), # v02
