@@ -137,12 +137,17 @@ total_adj=df_lump.industrial+df_lump.transportation+df_lump.commercial+df_lump.r
 sun_to_watershed=[
     ("Alameda_Creek","Alameda Creek"),
     ("Arroyo_del_Ha","Arroyo del Hambra"), # v02
+    ("Colma_Creek","Colma Creek"), # v02
+    ("Corte_Madera_","Corte Madera Creek"), # v02
     ("Coyote_Creek_",'Coyote Creek, Santa Clara'),
+    ("Coyote_Point","Coyote Point"), # v02
+    ("Estudillo_Can","Estudillo Canal"),# v02
     ("Glen_Echo_Cre",'Glen Echo Creek'),
     ("Guadalupe_Slo","Guadalupe Slough"),
     ("Guadalupe_Riv",'Guadalupe River'),
     ("Hastings_Slou",'Hastings Slough'), # v02
-    # ("Islais_Creek","Islais Creek"), # no loading -- SF combined
+    ("Highline_Cana","Highline Canal"), # v02
+    ("Islais_Creek","Islais Creek"), # no loading -- SF combined. Here for completeness, but has no load
     ("Matadero_and_",'Matadero and Adobe Creek'),
     ("Meeker_Slough","Meeker Slough"), # v02
     # One of these is the Grizzly side, the other is labeled Sac side,
@@ -150,28 +155,36 @@ sun_to_watershed=[
     ("Montezuma_Slo",'Montezuma Slough Grizzly'),
     ("Montezuma_Slo_1ser",'Montezuma Slough Sac'), 
     ("Napa_River",'Napa River'),
+    ("Novato_Creek","Novato Creek"), # v02
     ("Old_Alameda_C",'Old Alameda Creek'),
-    ("Pacheco_Creek",'Pacheco Creek'), 
+    ("Pacheco_Creek",'Pacheco Creek'),
+    ("Permanente_Cr","Permanente Creek"), # v02
     ("Petaluma_Rive",'Petaluma River'),
     ("Pinole_Creek",'Pinole Creek'),# v02
     ("Redwood_Creek",'Redwood Creek'), # v02
+    ("Rodeo_Creek",'Rodeo Creek'), # v02
     ("San_Francisqu",'San Francisquito'),
     ("San_Leandro_C",'San Leandro Creek'),
     ("San_Lorenzo_C",'San Lorenzo Creek'),
     ("San_Pablo_Cre",'San Pablo Creek'),
+    ("Seal_Creek","Seal Creek"), # v02
     ("Sonoma_Creek",'Sonoma Creek'),
+    ("Southampton_B","Southampton Bay"), # v02
     ("Steinberger_S", 'Steinberger Slough'),
     ("Stevens_Creek",'Stevens Creek'),
+    ("Strawberry_Cr","Strawberry Creek"), # v02
     ("Suisun_Slough",'Suisun Slough'),
     # This one is pretty bogus.  Not sure why the watersheds match so poorly here.
-    ("Sulphur_Sprin", 'Sulphur Springs Creek'), 
+    ("Sulphur_Sprin", 'Sulphur Springs Creek'),
+    ("Temescal_Cree", "Temescal Creek"),
     # Near Mallard Slough
     # from https://www.cccleanwater.org/watersheds/watersheds-in-contra-costa-county,
     # maybe Willow or Mt Diablo? not a choice
     # http://cocowaterweb.org/wp-content/uploads/Watershed-Atlas.pdf
     # no additional names.
     ("unnamed07",'unnamed07'),
-    ("unnamed08",'unnamed08'), 
+    ("unnamed08",'unnamed08'),
+    ("Visitacion","Visitacion")
 ]
 
 ptm_to_watershed={a:b for a,b in sun_to_watershed}
@@ -203,7 +216,7 @@ remap_names={
 
 for i in range(len(hydro_match)):
     inflow=hydro_match['inflowptm'][i]
-    print(inflow)
+    # print(inflow)
     if inflow not in watershed_to_ptm:
         # Not a PTM source
         print(f"Skipping inflow named {inflow}")
