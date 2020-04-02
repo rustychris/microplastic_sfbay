@@ -28,6 +28,9 @@ periods=np.unique( [ r.split('/')[-1] for r in all_runs] )
 # and within each period enumerate sources
 sources=np.unique( [ r.split('/')[-2] for r in all_runs] )
 
+clean=False # True => existing databases are removed first
+update=True # True => allow partial update of existing databases
+
 for period in periods:
     # Try shoving all of each 10 day period into the same database
     run_dirs=[os.path.join(base_dir,source,period)
@@ -53,11 +56,11 @@ for period in periods:
                         newer.append(rd)
                         print(f"Run {rd} appears newer than {fn}")
                         break # No need to look at more in this run
-            continue
+            if not update:
+                print("Update is not set and database exists, so moving on")
+                continue
 
-        clean=False
-
-        if clean :
+        if clean:
             os.path.exists(fn) and os.unlink(fn)
             create=True
         else:
@@ -77,11 +80,8 @@ for period in periods:
                 if create:
                     add_grid_to_db(grid,con)
                     init_ptm_tables(con)
-                elif clean:
-                    # stale logic
-                    clean_ptm_tables(con)
 
-            add_ptm_run_to_db(run,con,grid)
+            add_ptm_run_to_db(run,con,grid,on_exists='skip') 
             # open and close each time to catch IO errors sooner
             con.commit()
             con.close()

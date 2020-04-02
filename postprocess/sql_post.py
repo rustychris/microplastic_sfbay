@@ -78,10 +78,13 @@ def add_grid_to_db(g,con):
 
 def init_ptm_tables(con):
     curs=con.cursor()
+    # note that the unique constraint was added late in this code, so 021b databases and
+    # before do not have this.
     curs.execute(f"""
     CREATE TABLE ptm_run (
      id integer primary key,
-     run_dir text not null
+     run_dir text not null,
+     UNIQUE(run_dir)
     );""")
 
     curs.execute(f"""
@@ -154,14 +157,30 @@ def clean_ptm_tables(con):
     curs.execute("DELETE FROM ptm_group;")
     curs.execute("DELETE FROM ptm_run;")
 
-def add_ptm_run_to_db(run,con,grid,z_extractor=None):
+def add_ptm_run_to_db(run,con,grid,z_extractor=None,on_exists='skip'):
     """
     run: a postprocess_v00.PtmRun instance
     con: database connection
     grid: the corresponding grid (might be supplanted)
     z_extractor: instance of EtaExtractor.
+
+    on_exists: 'skip': if the run is already present in the database, do nothing
+      may add an option in the future to clean out the old run.  And may need
+      other options to allow more flexible matching of run_dir, since it is currently
+      stored as a full, absolute path.
+      'error':  raise an error
     """
     curs=con.cursor()
+
+    existing=curs.execute("select * from ptm_run where run_dir=?",[run.run_dir]).fetchall()
+    if len(existing):
+        if on_exists=='skip':
+            print(f"Run {run.run_dir} already in database. Skipping")
+            return
+        elif on_exists=='error':
+            raise Exception(f"Run {run.run_dir} already in database.")
+        else:
+            raise Exception(f"Bad value for on_exists='{on_exists}'")
 
     curs.execute("INSERT into ptm_run (run_dir) VALUES (?)",
                  [run.run_dir])
