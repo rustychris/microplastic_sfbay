@@ -103,7 +103,8 @@ def match_samples(recs):
             pdb.set_trace()
         manta_volumes1.loc[match,'SampleID'] = sample_id
         manta_volumes1.loc[match,'FibersYN'] = rec_fibers
-        manta_volumes1['Season']=rec_season
+        # used to be manta_volumes1['Season']
+        manta_volumes1.loc[match,'Season']=rec_season
         return True
     else:
         print(f"Station {station_code} and date {rec_date} and dup {sample_id} were not unique")
@@ -392,7 +393,8 @@ xy[valid,:]=proj_utils.mapper('WGS84','EPSG:26910')(ll[valid])
 manta_per_sample3['x']=xy[:,0]
 manta_per_sample3['y']=xy[:,1]
 
-manta_per_sample3.to_csv(f'manta_summary-v02.csv')
+# v03: trying to resurrect Dry/Wet data
+manta_per_sample3.to_csv(f'manta_summary-v03.csv')
 
 
 ## --------------------------------------------------------------------------------
