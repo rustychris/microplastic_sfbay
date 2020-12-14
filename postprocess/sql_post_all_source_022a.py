@@ -9,12 +9,17 @@ from sql_post import *
 
 base_dir="/home/rustyh/src/sfb_ocean/ptm/all_source_022a"
 
-import os
+import os, sys
 import glob
 import numpy as np
 
 # Only include sources that have run all the way through
 # 20180416
+# Need to rewrite this for chunks. Want to process all runs that
+# are complete.
+# Will come back on the sql side to report on whether there are
+# sources which do not have complete data.
+
 all_srcs=[os.path.dirname(f)
           for f in glob.glob(os.path.join(base_dir,"*/20170720"))]
 complete_srcs=[os.path.dirname(f)
@@ -24,6 +29,9 @@ all_runs=[f
           for f in glob.glob(os.path.join(src_dir,"201[78]????") ) ]
 
 print(f"Processing {len(complete_srcs)} completed sources of {len(all_srcs)} total, for {len(all_runs)} runs")
+
+sys.exit(1) # DBG
+
 
 # group by period
 periods=np.unique( [ r.split('/')[-1] for r in all_runs] )
