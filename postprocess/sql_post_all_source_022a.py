@@ -7,6 +7,14 @@ adapted from sql_post_all_source_020b.py, then 21b, now
 """
 from sql_post import *
 
+import argparse
+
+parser=argparse.ArgumentParser(description="Transcribe PTM data to sqlite")
+parser.add_argument("-u","--update",help="Allow updating existing database",
+                    action='store_true')
+parser.add_argument("-c","--clean",help="Remove existing databases")
+args=parser.parse_args()
+
 base_dir="/home/rustyh/src/sfb_ocean/ptm/all_source_022a"
 
 import os, sys
@@ -28,20 +36,19 @@ all_runs=[f
           for src_dir in complete_srcs
           for f in glob.glob(os.path.join(src_dir,"201[78]????") ) ]
 
-print(f"Processing {len(complete_srcs)} completed sources of {len(all_srcs)} total, for {len(all_runs)} runs")
-
-sys.exit(1) # DBG
-
-
 # group by period
 periods=np.unique( [ r.split('/')[-1] for r in all_runs] )
 # and within each period enumerate sources
 sources=np.unique( [ r.split('/')[-2] for r in all_runs] )
 
-clean=False # True => existing databases are removed first
-update=True # True => allow partial update of existing databases
+#clean=False # True => existing databases are removed first
+#update=True # True => allow partial update of existing databases
+
+print(f"Processing {len(complete_srcs)} completed sources/chunks of {len(all_srcs)} total, for {len(all_runs)} runs")
+print(f"{len(periods)} unique time periods")
 
 for period in periods:
+    print(f"Processing period: {period}")
     # Try shoving all of each 10 day period into the same database
     run_dirs=[os.path.join(base_dir,source,period)
               for source in sources ]
@@ -66,11 +73,11 @@ for period in periods:
                         newer.append(rd)
                         print(f"Run {rd} appears newer than {fn}")
                         break # No need to look at more in this run
-            if not update:
+            if not args.update:
                 print("Update is not set and database exists, so moving on")
                 continue
 
-        if clean:
+        if args.clean:
             os.path.exists(fn) and os.unlink(fn)
             create=True
         else:
