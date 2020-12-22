@@ -23,6 +23,7 @@ log.root.setLevel(log.INFO)
 
 import re
 import matplotlib.pyplot as plt
+import post_local
 
 ##
 
@@ -45,13 +46,14 @@ class PtmRun(object):
         files=[]
         for tok in self.hydrodynamics_inp():
             if tok[0]=='HYDRO_FILE_PATH':
-                path=self.remap_path(tok[1])
+                path=post_local.remap_path(tok[1])
             elif tok[0]=='FILENAME':
                 files.append( os.path.join(path,tok[1]) )
                 path=None
         return files
 
     def remap_path(self,path):
+        assert False,"Use post_local remap_path"
         for src,tgt in self.run_dir_mapping:
             # might get fancier if the paths were weirder, but this
             # should be good enough here.
@@ -72,7 +74,7 @@ class PtmRun(object):
         # as the BC files have extra fake data.
         models=[]
         for p in paths:
-            p=self.remap_path(p)
+            p=post_local.remap_path(p)
             # loading the grid can slow it down, and really only need the
             # bc dataset.
             model=sun_driver.SuntansModel.load(p,load_grid=False)
@@ -120,6 +122,7 @@ class PtmRun(object):
                     else:
                         log.warning("BC dataset had no useful times?")
 
+            assert len(trim_dss)
             ds=xr.concat(trim_dss,dim='Nt',data_vars='different')
             # somehow there is some 1e-9 difference between xe 
             for v in ['xe','ye']:
@@ -221,7 +224,7 @@ class PtmRun(object):
         return Q_for_t
 
     def grid(self):
-        return grid_from_ptm_hydro(self.ptm_hydro_files()[0])
+        return grid_from_ptm_hydro(post_local.remap_path(self.ptm_hydro_files()[0]))
     
     
 # information that will be filled in by scan_group()
@@ -591,10 +594,11 @@ class EtaExtractor(object):
         if self.ds: 
             self.ds.close()
             self.ds=None
-        self.ds=xr.open_dataset(self.hydro_fns[index])
+        self.ds=xr.open_dataset(post_local.remap_path(self.hydro_fns[index]))
         self.fn_index=index
         # more standard name for time
-        self.ds['time']=self.ds['Mesh2_data_time']  
+        self.ds['time']=self.ds['Mesh2_data_time']
+        self.time_values=None
         return True
     def eta_for_time(self,t):
         while t>self.ds.time.values[-1]:
@@ -603,11 +607,17 @@ class EtaExtractor(object):
         while t<self.ds.time.values[0]:
             if not self.open_prev():
                 return None
-        ti=np.searchsorted(self.ds.time.values,t)
-        if self.ds.time.values[ti]!=t:
+        if self.time_values is None:
+            self.time_values = self.ds.time.values
+            
+        ti=np.searchsorted(self.time_values,t)
+        if self.time_values[ti]!=t:
             print(f"Time mismatch: {self.ds.time.values[ti]} (ds) != {t} (requested)")
-        else:
-            pass # print("Time matches")
+        #return self.ds.Mesh2_sea_surface_elevation.isel(nMesh2_data_time=ti).values
+        return self.eta_by_index(self.fn_index,ti)
+    
+    @memoize.imemoize(lru=1)
+    def eta_by_index(self,fn_index,ti):
         return self.ds.Mesh2_sea_surface_elevation.isel(nMesh2_data_time=ti).values
 
 def add_z_surf(particles,grid,ptm_runs): 
@@ -683,6 +693,7 @@ def particle_to_density(particles,grid,normalize='area'):
     return mass
 
 def grid_from_ptm_hydro(grid_fn):
+    print("Trying to load grid from '%s'"%grid_fn)
     ds=xr.open_dataset(grid_fn)
     ds['Mesh2']=(),1
     ds.Mesh2.attrs.update(dict(cf_role='mesh_topology',
@@ -696,7 +707,7 @@ def grid_from_ptm_hydro(grid_fn):
                                edge_coordinates='Mesh2_edge_x Mesh2_edge_y'))
     grid=unstructured_grid.UnstructuredGrid.from_ugrid(ds)
     # This is straight from the output, so no need to add bathy offset
-    grid.add_cell_field('z_bed',-grid.cells['Mesh2_face_depth'])
+    grid.add_cell_field('z_bed',-grid.cells['Mesh2_face_depth'],on_exists='overwrite')
 
     return grid
     

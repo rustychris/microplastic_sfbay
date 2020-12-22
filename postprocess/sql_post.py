@@ -157,7 +157,7 @@ def clean_ptm_tables(con):
     curs.execute("DELETE FROM ptm_group;")
     curs.execute("DELETE FROM ptm_run;")
 
-def add_ptm_run_to_db(run,con,grid,z_extractor=None,on_exists='skip'):
+def add_ptm_run_to_db(run,con,grid,z_extractor=None,on_exists='skip',profile=False):
     """
     run: a postprocess_v00.PtmRun instance
     con: database connection
@@ -172,35 +172,67 @@ def add_ptm_run_to_db(run,con,grid,z_extractor=None,on_exists='skip'):
     """
     curs=con.cursor()
 
-    existing=curs.execute("select * from ptm_run where run_dir=?",[run.run_dir]).fetchall()
+    run_id=None
+    existing=curs.execute("select id from ptm_run where run_dir=?",[run.run_dir]).fetchall()
     if len(existing):
         if on_exists=='skip':
             print(f"Run {run.run_dir} already in database. Skipping")
             return
         elif on_exists=='error':
             raise Exception(f"Run {run.run_dir} already in database.")
+        elif on_exists=='continue':
+            run_id=existing[0][0]
+            print(f"Run {run.run_dir} already in database. Will proceed with run_id={run_id}")
         else:
             raise Exception(f"Bad value for on_exists='{on_exists}'")
 
-    curs.execute("INSERT into ptm_run (run_dir) VALUES (?)",
-                 [run.run_dir])
-    run_id=curs.lastrowid
+    if run_id is None:
+        curs.execute("INSERT into ptm_run (run_dir) VALUES (?)",
+                     [run.run_dir])
+        run_id=curs.lastrowid
 
     if z_extractor is None:
         z_extractor=post.EtaExtractor(ptm_runs=[run])
         
     for group in run.groups():
-        add_ptm_group_to_db(group,run,run_id,con,curs,grid,z_extractor=z_extractor)
+        if profile:
+            print("PROFILING!")
+            import cProfile
+            from pstats import SortKey
+            pr = cProfile.Profile()
+            pr.enable()
+        add_ptm_group_to_db(group,run,run_id,con,curs,grid,z_extractor=z_extractor,
+                            on_exists='skip')
+        if profile:
+            print("END PROFILING")
+            pr.disable()
+            pr.print_stats(SortKey.CUMULATIVE)
+            raise Exception("Will bail out -- check profiling")
 
-def add_ptm_group_to_db(group,run,run_id,con,curs,grid,z_extractor=None):
+def add_ptm_group_to_db(group,run,run_id,con,curs,grid,z_extractor=None,
+                        on_exists='error'):
+    t0=time.time()
+    
     pbf=run.open_binfile(group)
 
     name=group
-    curs.execute("""INSERT into ptm_group (name,filename,run_id)
-                    VALUES (?,?,?)""",
-                 [name,name,run_id])
-    group_id=curs.lastrowid
-    print(f"Run [{run_id}] {run.run_dir}   Group [{group_id}] {name}")
+    existing=curs.execute("""select id from ptm_group
+                              where filename=?
+                                and run_id=? """,
+                          [name,run_id])
+    if len(existing):
+        group_id=existing[0][0]
+        print(f"Run [{run_id}] {run.run_dir}   Group (existing) [{group_id}] {name}")
+        if on_exists=='error':
+            raise Exception("Group already exists in database")
+        elif on_exists=='skip':
+            return
+    else:
+        curs.execute("""INSERT into ptm_group (name,filename,run_id)
+                        VALUES (?,?,?)""",
+                     [name,name,run_id])
+        group_id=curs.lastrowid
+        print(f"Run [{run_id}] {run.run_dir}   Group [{group_id}] {name}")
 
     # Record the data from release_log
     release_log=run.open_release_log(group)
@@ -245,8 +277,8 @@ def add_ptm_group_to_db(group,run,run_id,con,curs,grid,z_extractor=None):
     INSERT into ptm_release (time,count,group_id,start_id,end_id,volume)
       VALUES (?,?,?,?,?,?)""",
                      rows)
-
-    print("Populating unique particles based on releases")
+    
+    print("add_ptm_group_to_db: Populating unique particles based on releases")
     # Pull the releases back out to help populate particle_id
     group_gid_to_particle={}
     
@@ -272,6 +304,10 @@ def add_ptm_group_to_db(group,run,run_id,con,curs,grid,z_extractor=None):
     epochs=[]
     xys=[]
 
+    t_elapsed=time.time()-t0
+    t0+=t_elapsed
+    print(f"add_ptm_group_to_db: prep time {t_elapsed:.2f}s")
+    
     # Fastest to compute cells for all of the points at once, then cache the
     # result for returning by read_timesteps.  Since this mapping is grid-dependent
     # require that the grid be provided, and the returned key can be efficiently
@@ -283,6 +319,10 @@ def add_ptm_group_to_db(group,run,run_id,con,curs,grid,z_extractor=None):
     cells=cell_ds['cell'].values
     all_cell=[int(c) for c in cells]
 
+    t_elapsed=time.time()-t0
+    t0+=t_elapsed
+    print(f"add_ptm_group_to_db: precompute_cells {t_elapsed:.2f}s")
+    
     z_from_beds=[]
     z_from_surfs=[]
     
@@ -309,6 +349,10 @@ def add_ptm_group_to_db(group,run,run_id,con,curs,grid,z_extractor=None):
                            for gid in parts['id'] ] )
         epochs.append( epoch*np.ones(len(parts['id']),np.int32) )
 
+    t_elapsed=time.time()-t0
+    t0+=t_elapsed
+    print(f"add_ptm_group_to_db: populate z dims, particle ids {t_elapsed:.2f}s")
+
     # all_xy=np.concatenate(xys)
     # all_gid=[int(i) for i in np.concatenate(gids)]
     all_part_id=[pid for sublist in part_ids for pid in sublist] # flatten
@@ -329,6 +373,10 @@ def add_ptm_group_to_db(group,run,run_id,con,curs,grid,z_extractor=None):
                      INSERT INTO particle_loc (particle_id,time,cell,z_from_bed,z_from_surface)
                      VALUES (?,?,?,?,?)""",
                      rows)
+
+    t_elapsed=time.time()-t0
+    t0+=t_elapsed
+    print(f"add_ptm_group_to_db: insert into particle_loc {t_elapsed:.2f}s")
     
     # Still TODO: 
     # z_from_bed DOUBLE,
@@ -342,3 +390,8 @@ def add_ptm_group_to_db(group,run,run_id,con,curs,grid,z_extractor=None):
         time.sleep(5)
         print("Trying again")
         con.commit()
+
+    t_elapsed=time.time()-t0
+    t0+=t_elapsed
+    print(f"add_ptm_group_to_db: commit {t_elapsed:.2f}s")
+        
