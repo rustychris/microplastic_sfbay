@@ -156,6 +156,8 @@ for period in periods:
 
     os.makedirs(os.path.dirname(fn),exist_ok=1)
 
+    modified=0
+    
     if 1: # building the original databases
         if os.path.exists(fn):
             # for the moment, play it safe and skip anything that appears to
@@ -174,6 +176,8 @@ for period in periods:
             if not args.update:
                 print("Update is not set and database exists, so moving on")
                 continue
+            else:
+                print("Database exists and update is enabled. Proceeding with caution")
 
         if args.clean:
             os.path.exists(fn) and os.unlink(fn)
@@ -195,26 +199,17 @@ for period in periods:
                 if create:
                     add_grid_to_db(grid,con)
                     init_ptm_tables(con)
+                    modified+=1
 
-            # if args.profile:
-            #     print("PROFILING!")
-            #     import cProfile, pstats, io
-            #     from pstats import SortKey
-            #     pr = cProfile.Profile()
-            #     pr.enable()
-            
             # Trying out new on_exists='continue' which will add missing groups
-            add_ptm_run_to_db(run,con,grid,on_exists='continue',profile=args.profile)
+            # could also use 'continue', which would get missing groups.
+            modified+=add_ptm_run_to_db(run,con,grid,on_exists='skip',profile=args.profile)
             # open and close each time to catch IO errors sooner
             # Note that groups are committed along the way.
             con.commit()
             con.close()
-            # if args.profile:
-            #     print("END PROFILING")
-            #     pr.disable()
-            #     pr.print_stats(SortKey.CUMULATIVE)
 
-    if 1: # building index on particle time
+    if modified: # building index on particle time
         print(fn)
         if not os.path.exists(fn):
             print("Can't build index - %s doesn't exist"%fn)

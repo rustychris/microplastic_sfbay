@@ -169,27 +169,51 @@ def add_ptm_run_to_db(run,con,grid,z_extractor=None,on_exists='skip',profile=Fal
       other options to allow more flexible matching of run_dir, since it is currently
       stored as a full, absolute path.
       'error':  raise an error
+      'continue': if a run already exists, move on to check its groups
+
+    return: 1 if database was modified, 0 if not.
     """
     curs=con.cursor()
+    # Concurrency: wrap these steps in a transaction. If two processes hit this section
+    # at the same time, both will get a SHARED lock at the time of the first SELECT
+    # below. Then nobody can get a RESERVED lock for the INSERT, we'll fail, and move on.
+    # Or one process is already to the select, gets the RESERVED lock, and the late-comer
+    # cannot get a SHARED lock.
+    modified=0
 
-    run_id=None
-    existing=curs.execute("select id from ptm_run where run_dir=?",[run.run_dir]).fetchall()
-    if len(existing):
-        if on_exists=='skip':
-            print(f"Run {run.run_dir} already in database. Skipping")
-            return
-        elif on_exists=='error':
-            raise Exception(f"Run {run.run_dir} already in database.")
-        elif on_exists=='continue':
-            run_id=existing[0][0]
-            print(f"Run {run.run_dir} already in database. Will proceed with run_id={run_id}")
-        else:
-            raise Exception(f"Bad value for on_exists='{on_exists}'")
+    try:
+        curs.execute("BEGIN TRANSACTION")
+        try:
+            run_id=None
+            try:
+                existing=curs.execute("select id from ptm_run where run_dir=?",[run.run_dir]).fetchall()
+            except sql.OperationalError:
+                print("While checking for ptm_run, got error. Assuming locked, and we should move on")
+                return modified
 
-    if run_id is None:
-        curs.execute("INSERT into ptm_run (run_dir) VALUES (?)",
-                     [run.run_dir])
-        run_id=curs.lastrowid
+            if len(existing):
+                if on_exists=='skip':
+                    print(f"Run {run.run_dir} already in database. Skipping")
+                    return modified
+                elif on_exists=='error':
+                    raise Exception(f"Run {run.run_dir} already in database.")
+                elif on_exists=='continue':
+                    run_id=existing[0][0]
+                    print(f"Run {run.run_dir} already in database. Will proceed with run_id={run_id}")
+                else:
+                    raise Exception(f"Bad value for on_exists='{on_exists}'")
+
+            if run_id is None:
+                curs.execute("INSERT into ptm_run (run_dir) VALUES (?)",
+                             [run.run_dir])
+                run_id=curs.lastrowid
+                modified+=1
+        finally:
+            # To help coordinate between multiple workers, commit ptm_run quickly.
+            con.commit()
+    except sql.OperationalError as exc:
+        print("Operational error (%s) while inserting run.  Assume locked."%str(exc))
+        return 0
 
     if z_extractor is None:
         z_extractor=post.EtaExtractor(ptm_runs=[run])
@@ -201,38 +225,49 @@ def add_ptm_run_to_db(run,con,grid,z_extractor=None,on_exists='skip',profile=Fal
             from pstats import SortKey
             pr = cProfile.Profile()
             pr.enable()
-        add_ptm_group_to_db(group,run,run_id,con,curs,grid,z_extractor=z_extractor,
-                            on_exists='skip')
+        modified+=add_ptm_group_to_db(group,run,run_id,con,curs,grid,z_extractor=z_extractor,
+                                      on_exists='skip')
         if profile:
             print("END PROFILING")
             pr.disable()
             pr.print_stats(SortKey.CUMULATIVE)
             raise Exception("Will bail out -- check profiling")
+        
+    return modified
 
 def add_ptm_group_to_db(group,run,run_id,con,curs,grid,z_extractor=None,
                         on_exists='error'):
+    """
+    returns: 1 if database was modified. 0 otherwise.
+    """
+    modified=0
     t0=time.time()
     
     pbf=run.open_binfile(group)
 
+    curs.execute("BEGIN TRANSACTION")
+    
     name=group
     existing=curs.execute("""select id from ptm_group
                               where filename=?
                                 and run_id=? """,
-                          [name,run_id])
+                          [name,run_id]).fetchall()
     if len(existing):
         group_id=existing[0][0]
         print(f"Run [{run_id}] {run.run_dir}   Group (existing) [{group_id}] {name}")
         if on_exists=='error':
             raise Exception("Group already exists in database")
         elif on_exists=='skip':
-            return
+            return modified
+        else:
+            raise Exception(f"on_exists='{on_exists}' not understood in add_ptm_group_to_db")
     else:
         curs.execute("""INSERT into ptm_group (name,filename,run_id)
                         VALUES (?,?,?)""",
                      [name,name,run_id])
         group_id=curs.lastrowid
         print(f"Run [{run_id}] {run.run_dir}   Group [{group_id}] {name}")
+        modified+=1
 
     # Record the data from release_log
     release_log=run.open_release_log(group)
@@ -277,6 +312,7 @@ def add_ptm_group_to_db(group,run,run_id,con,curs,grid,z_extractor=None,
     INSERT into ptm_release (time,count,group_id,start_id,end_id,volume)
       VALUES (?,?,?,?,?,?)""",
                      rows)
+    modified+=curs.rowcount
     
     print("add_ptm_group_to_db: Populating unique particles based on releases")
     # Pull the releases back out to help populate particle_id
@@ -296,7 +332,8 @@ def add_ptm_group_to_db(group,run,run_id,con,curs,grid,z_extractor=None,
             # This mapping can then be used to fill in the remaining data below
             # when populating particle_loc
             group_gid_to_particle[ (group_id,i) ]=particle_id
-                     
+            modified+=1
+            
     # Assemble these one group at a time.
     Nsteps=pbf.count_timesteps()
     gids=[] # the group-unique ids
@@ -373,7 +410,7 @@ def add_ptm_group_to_db(group,run,run_id,con,curs,grid,z_extractor=None,
                      INSERT INTO particle_loc (particle_id,time,cell,z_from_bed,z_from_surface)
                      VALUES (?,?,?,?,?)""",
                      rows)
-
+    modified+=curs.rowcount
     t_elapsed=time.time()-t0
     t0+=t_elapsed
     print(f"add_ptm_group_to_db: insert into particle_loc {t_elapsed:.2f}s")
@@ -394,4 +431,5 @@ def add_ptm_group_to_db(group,run,run_id,con,curs,grid,z_extractor=None,
     t_elapsed=time.time()-t0
     t0+=t_elapsed
     print(f"add_ptm_group_to_db: commit {t_elapsed:.2f}s")
+    return modified
         
