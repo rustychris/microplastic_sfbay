@@ -17,7 +17,9 @@ import post_local
 import argparse
 
 parser=argparse.ArgumentParser(description="Transcribe PTM data to sqlite")
-parser.add_argument("-u","--update",help="Allow updating existing database",
+parser.add_argument("-u","--update",help="Allow updating existing database with additional runs",
+                    action='store_true')
+parser.add_argument("-U","--update-groups",help="Allow updating existing runs with additional groups",
                     action='store_true')
 parser.add_argument("-c","--clean",help="Remove existing databases")
 parser.add_argument("-p","--profile",help="Add a singe group and profile the process",
@@ -26,6 +28,8 @@ parser.add_argument("-s","--status",help="Scan all runs and groups and print ove
                     action='store_true')
 
 args=parser.parse_args()
+if args.update_groups:
+    args.update=True
 
 base_dir=post_local.all_source_base_dir
 
@@ -203,7 +207,12 @@ for period in periods:
 
             # Trying out new on_exists='continue' which will add missing groups
             # could also use 'continue', which would get missing groups.
-            modified+=add_ptm_run_to_db(run,con,grid,on_exists='skip',profile=args.profile)
+            if args.update_groups:
+                on_exists='continue'
+            else:
+                on_exists='skip'
+            modified+=add_ptm_run_to_db(run,con,grid,
+                                        on_exists=on_exists,profile=args.profile)
             # open and close each time to catch IO errors sooner
             # Note that groups are committed along the way.
             con.commit()

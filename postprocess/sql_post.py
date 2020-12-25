@@ -210,6 +210,8 @@ def add_ptm_run_to_db(run,con,grid,z_extractor=None,on_exists='skip',profile=Fal
                 modified+=1
         finally:
             # To help coordinate between multiple workers, commit ptm_run quickly.
+            # Is this necessary?
+            curs.execute("END TRANSACTION")
             con.commit()
     except sql.OperationalError as exc:
         print("Operational error (%s) while inserting run.  Assume locked."%str(exc))
@@ -225,8 +227,14 @@ def add_ptm_run_to_db(run,con,grid,z_extractor=None,on_exists='skip',profile=Fal
             from pstats import SortKey
             pr = cProfile.Profile()
             pr.enable()
-        modified+=add_ptm_group_to_db(group,run,run_id,con,curs,grid,z_extractor=z_extractor,
-                                      on_exists='skip')
+        curs.execute("BEGIN TRANSACTION")
+        try:
+            modified+=add_ptm_group_to_db(group,run,run_id,con,curs,grid,z_extractor=z_extractor,
+                                          on_exists='skip')
+        finally:
+            curs.execute("END TRANSACTION")
+            con.commit()
+            
         if profile:
             print("END PROFILING")
             pr.disable()
@@ -245,8 +253,6 @@ def add_ptm_group_to_db(group,run,run_id,con,curs,grid,z_extractor=None,
     
     pbf=run.open_binfile(group)
 
-    curs.execute("BEGIN TRANSACTION")
-    
     name=group
     existing=curs.execute("""select id from ptm_group
                               where filename=?
@@ -418,15 +424,6 @@ def add_ptm_group_to_db(group,run,run_id,con,curs,grid,z_extractor=None,
     # Still TODO: 
     # z_from_bed DOUBLE,
     # z_from_surface DOUBLE,
-    try:
-        con.commit()
-    except sql.OperationalError as exc:
-        print("Commit got an operational error")
-        print(exc)
-        print("Sleeping")
-        time.sleep(5)
-        print("Trying again")
-        con.commit()
 
     t_elapsed=time.time()-t0
     t0+=t_elapsed
