@@ -3,3 +3,5 @@ __pycache__
 processed
 batch.log
 Thumbs*
+*.png
+parameter-scan*.csv
