@@ -416,12 +416,11 @@ def query_group_particles(group_path,criteria,load_data,bc_ds):
             else:
                 particles=particles[sel]
         t=utils.to_dt64(datenum)
-        df=pd.DataFrame()
-        df['id']=particles['id']
-        df['x0']=particles['x'][:,0]
-        df['x1']=particles['x'][:,1]
-        df['x2']=particles['x'][:,2]
-        df['active']=particles['active']
+        df=pd.DataFrame({'id':particles['id'],
+                         'x0':particles['x'][:,0],
+                         'x1':particles['x'][:,1],
+                         'x2':particles['x'][:,2],
+                         'active':particles['active']})
         # Avoid keeping all this memmap'd data around
         del particles
         df['time']=t
