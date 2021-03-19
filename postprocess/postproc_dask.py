@@ -28,6 +28,10 @@ from stompy import utils
 
 log=logging.getLogger('postproc')
 
+from scipy import sparse
+
+from stompy.spatial import proj_utils
+ll2utm=proj_utils.mapper('WGS84','EPSG:26910')
 
 def config_malloc():
     """
@@ -236,6 +240,9 @@ def criteria_to_groups(criteria,cfg):
     
     for run_path in cfg['ptm_run_paths']:
         run_group_paths=run_to_group_paths(run_path)
+        if len(run_group_paths)==0:
+            log.warning(f"Run path {run_path} had no groups")
+            continue
         group0_path=run_group_paths[0]
         pb=ptm_tools.PtmBin(fn=group0_path)
 
@@ -284,10 +291,13 @@ def load_conc(source,behavior,criteria,load_data):
     or a single category name
     """
     categories=criteria.get('category','all')
-    
+
     # source: e.g. 'San_Lorenzo_C'.
     # Remaps a subset of the source names
     load_source=source_ptm_to_load.get(source,source)
+    if load_source=='DELTA':
+        return 0.0
+
     w_s=w_s_map[behavior]
     conc_over_category=load_data['conc'].sel(source=load_source,w_s=w_s)
     if categories=='all':
@@ -766,6 +776,101 @@ def query_particle_concentration(criteria,cfg,grid,decay=None):
     
     return ds
 
+def rec_to_cell_weights(rec,areas,grid,Msmooth,smooth=30,thresh=1e-5):
+    """ Convert manta record entries to cell indexes and weights
+    returns tuple ( [idx,idx,...], [weight,weight,...] )
+        
+    smooth: iterations of applying Msmooth.
+    --  if negative, use an implicit form.
 
+    thresh: how much cumulative weight to trim from the tail. 
+    """
+    ll_start=[rec['LONG START'],rec['LAT START']]
+    if np.isnan( rec['LONG END']):
+        ll_stop=ll_start
+    else:
+        ll_stop=[rec['LONG END'],rec['LAT END']]
+    xy_start=ll2utm(ll_start)
+    xy_stop =ll2utm(ll_stop)
 
+    xys=xy_start + np.linspace(0,1,100)[:,None] * (xy_stop-xy_start)
+    cells=[grid.select_cells_nearest(xy) for xy in xys]
+    cells=np.unique(cells)
+    # area-weighted average of concentration in the cells intersected 
+    # by the track
+    
+    imp=np.zeros(grid.Ncells(),np.float64)
+    imp[cells]=1.0 
 
+    if smooth>0:
+        for _ in range(smooth):
+            imp=Msmooth.dot(imp)
+    elif smooth<0:
+        I=sparse.eye(*Msmooth.shape)
+        M_implicit=I-(Msmooth-I)*(-smooth)
+        imp=sparse.linalg.spsolve(M_implicit,imp)
+        
+    # and now area weighted:
+    sel=imp>0
+    cells=np.nonzero(sel)[0]
+    weights=imp[cells]*areas[cells]
+    weights/=weights.sum()
+   
+    if thresh is not None:
+        order=np.argsort(weights) # ascending weights
+        cut=np.searchsorted( np.cumsum(weights[order]),thresh)
+        cells=cells[order[cut:]]
+        weights=weights[order[cut:]]
+        weights/=weights.sum()
+    return cells,weights
+
+def particles_for_date(rec_DATE,cfg):
+    """
+    Query particles centered around the given date, as a string.
+    Assumes the date has no time information
+
+    The time window is large enough to allow a godin tidal filter
+    
+    cfg['manta_out_dir'] controls where results are cached.
+    """
+    out_dir=cfg['manta_out_dir']
+    fn=os.path.join(out_dir,f"v01-{rec_DATE[:10]}.nc")
+    t_sample=np.datetime64(rec_DATE)
+    
+    if not os.path.exists(fn):
+        # pull a generous buffer of particles here, and narrow
+        # the time zones are annoying but I double-checked and
+        # this does give enough of a buffer.
+        
+        # want to be able to, after the fact, query a full 25h tidal cycle
+        # centered on the actual time of a sample that could fall anywhere
+        # in this day.
+        t_start=t_sample+np.timedelta64(8,'h') - np.timedelta64(12,'h')
+        # and go for a tidal day
+        t_stop =t_sample+np.timedelta64(8+24,'h') + np.timedelta64(13,'h')
+        query_n_steps=25 # how many hours are included in the query.
+
+        # 2020305 changes:
+        t_start-=np.timedelta64(24,'h')
+        t_stop+=np.timedelta64(24,'h')
+        # This is just enough of a time window to calculate a godin
+        # filter.
+        query_n_steps += 48
+
+        # Maybe better than a pad would be to calculate the stencil.
+        # pad=4000
+        # Something like this:
+        criteria=dict(t_min=np.datetime64(t_start), 
+                      t_max=np.datetime64(t_stop), 
+                      category='nonfiber', # ADJUST
+                      # query a 2*pad x 2*pad box
+                      # bbox=[rec.x-pad,rec.x+pad,rec.y-pad,rec.y+pad],
+                      z_below_surface_max=0.095,
+                      age_max=np.timedelta64(60,'D'))
+
+        part_d=query_particles(criteria=criteria,cfg=cfg)    
+        df=part_d.compute()
+        df.to_parquet(fn)
+    else:
+        df=pd.read_parquet(fn)
+    return df
