@@ -824,7 +824,17 @@ def rec_to_cell_weights(rec,areas,grid,Msmooth,smooth=30,thresh=1e-5):
         weights/=weights.sum()
     return cells,weights
 
-def particles_for_date(rec_DATE,cfg):
+# prebuild a godin window
+if 1:
+    from stompy import filters
+    godwin_offset_h=50
+    imp=np.arange(100)==godwin_offset_h-1 # seems my godin filter is shifted 1
+    godwin=filters.lowpass_godin(imp,mean_dt_h=1.0)
+    assert godwin_offset_h==np.argmax(godwin)
+    # godwin[delta_hours + h_offset] gives the weight for the time average
+    # of a sample taken delta_hours away from t_center
+
+def particles_for_date(rec_DATE,cfg,criteria={},include_godin=True,cache=True):
     """
     Query particles centered around the given date, as a string.
     Assumes the date has no time information
@@ -832,12 +842,16 @@ def particles_for_date(rec_DATE,cfg):
     The time window is large enough to allow a godin tidal filter
     
     cfg['manta_out_dir'] controls where results are cached.
+
+    criteria will be added to defaults below
     """
-    out_dir=cfg['manta_out_dir']
-    fn=os.path.join(out_dir,f"v01-{rec_DATE[:10]}.nc")
     t_sample=np.datetime64(rec_DATE)
     
-    if not os.path.exists(fn):
+    if cache:
+        out_dir=cfg['manta_out_dir']
+        fn=os.path.join(out_dir,f"v01-{rec_DATE[:10]}.nc")
+    
+    if (not cache) or (not os.path.exists(fn)):
         # pull a generous buffer of particles here, and narrow
         # the time zones are annoying but I double-checked and
         # this does give enough of a buffer.
@@ -857,20 +871,39 @@ def particles_for_date(rec_DATE,cfg):
         # filter.
         query_n_steps += 48
 
-        # Maybe better than a pad would be to calculate the stencil.
-        # pad=4000
         # Something like this:
-        criteria=dict(t_min=np.datetime64(t_start), 
+        defaults=dict(t_min=np.datetime64(t_start), 
                       t_max=np.datetime64(t_stop), 
-                      category='nonfiber', # ADJUST
-                      # query a 2*pad x 2*pad box
-                      # bbox=[rec.x-pad,rec.x+pad,rec.y-pad,rec.y+pad],
+                      category='nonfiber',
                       z_below_surface_max=0.095,
                       age_max=np.timedelta64(60,'D'))
-
-        part_d=query_particles(criteria=criteria,cfg=cfg)    
+        defaults.update(criteria)
+        part_d=query_particles(criteria=defaults,cfg=cfg)    
         df=part_d.compute()
-        df.to_parquet(fn)
+        if cache:
+            df.to_parquet(fn)
     else:
         df=pd.read_parquet(fn)
+
+    if include_godin:
+        # Add godin weights:
+        # Noon, local, day of sampling
+        t_center = t_sample+np.timedelta64(8,'h') + np.timedelta64(12,'h')
+        delta_hours=((df['time']-t_center)/np.timedelta64(1,'h')).astype(np.int32)
+        df['weight_time']=godwin[delta_hours+godwin_offset_h]
+        
     return df
+
+def group_weights(tdf,storm_factor=1.0):
+    groups=tdf['group'].unique()
+    group_to_weight={}
+    for grp in groups:
+        for potw in ['sunnyvale','san_jose','palo_alto','cccsd',
+                     'fs','src000','src001','src002']:
+            if ('/'+potw) in grp:
+                group_to_weight[grp]=1.0
+                break
+        else:
+            group_to_weight[grp]=storm_factor
+    weights=tdf['group'].map(group_to_weight)
+    return weights
