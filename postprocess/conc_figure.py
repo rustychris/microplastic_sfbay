@@ -17,7 +17,7 @@ class BayConcFigure(object):
     figsize=(8.4,8)
     ax=None
     fig=None
-    vmin=1e-4
+    vmin=1e-3
     vmax=100.0
     zoom=(517521., 609000., 4139744., 4230000.)
     cmap=cmap

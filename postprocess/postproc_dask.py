@@ -48,9 +48,10 @@ def config_malloc():
 
     M_MMAP_THRESHOLD = -3
     # The following would return 0 on error
+    log.warning("Configuring malloc")
     mallopt(M_MMAP_THRESHOLD, 16*1024)
 
-    
+config_malloc()
 
 # Load data 
 def get_load_data():
@@ -685,6 +686,10 @@ def filter_particles_post_attrs(particles, criteria):
         age_max_s=criteria['age_max']/np.timedelta64(1,'s')
         sel=(part_filtered['age_s']<=age_max_s)
         part_filtered=part_filtered[sel]
+
+    for k in criteria:
+        if k.startswith('z_') and k not in ['z_below_surface_max','z_above_bed_max']:
+            raise Exception("Possible misspelling: %s"%k)
     return part_filtered
 
 def query_particles(criteria,cfg):

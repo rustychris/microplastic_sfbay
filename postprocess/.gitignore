@@ -5,3 +5,8 @@ batch.log
 Thumbs*
 *.png
 parameter-scan*.csv
+hourly-out-v0*
+manta_sets*
+snapshots-v*
+dask-worker-space
+surface-frames-v*
