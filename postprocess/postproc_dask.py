@@ -100,9 +100,9 @@ w_s_map={'down50000':0.05,
          'down5000':0.005,
          'down500':0.0005,
          'none':0.0,
-         'up500':0.0005,
-         'up5000':0.005,
-         'up50000':0.05}
+         'up500':-0.0005,
+         'up5000':-0.005,
+         'up50000':-0.05}
 # For a subset of the source names in the PTM setup,
 # map them to the name used in the loading data
 source_ptm_to_load={
@@ -851,6 +851,9 @@ def particles_for_date(rec_DATE,cfg,criteria={},include_godin=True,cache=True):
     criteria will be added to defaults below
     """
     t_sample=np.datetime64(rec_DATE)
+
+    if cache and len(criteria):
+        raise Exception("Caching only available for default criteria")
     
     if cache:
         out_dir=cfg['manta_out_dir']
