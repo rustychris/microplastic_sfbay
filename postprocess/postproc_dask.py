@@ -59,7 +59,7 @@ def get_load_data():
     Load loading data, return an xr.Dataset that maps
     sources and behaviors to concentrations in particles/liter
     """
-    loads_orig=xr.open_dataset("../loads/plastic_loads-7classes-v05.nc")
+    loads_orig=xr.open_dataset("../loads/plastic_loads-7classes-v06.nc")
 
     # And the per-watershed scaling factor
     storm_scales=pd.read_csv("../loads/stormwater_concs-v02.csv")
