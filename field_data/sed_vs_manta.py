@@ -2,7 +2,8 @@ from matplotlib.ticker import FuncFormatter
 import plastic_data
 import seaborn as sns
 from matplotlib.ticker import ScalarFormatter
-
+import matplotlib.pyplot as plt
+import numpy as np
 import common
 ##
 
@@ -23,8 +24,15 @@ ret=axs[1].hist( common.map_bilog(sed_df.w_s[sed_df.w_s.notnull()]),bins=bins)
 
 axs[1].xaxis.set_major_formatter(FuncFormatter(lambda s,i: common.mapped_label(s)))
 
-axs[0].text(0.01,0.9,'Surface',transform=axs[0].transAxes)
-axs[1].text(0.01,0.9,'Sediment',transform=axs[1].transAxes)
+axs[0].text(0.02,0.94,'Surface' ,transform=axs[0].transAxes,va='top',fontweight='bold',fontsize=14)
+axs[1].text(0.02,0.94,'Sediment',transform=axs[1].transAxes,va='top',fontweight='bold',fontsize=14)
+
+fig.subplots_adjust(left=0.12,right=0.98,top=0.98,bottom=0.15)
+fig.set_size_inches([6,4],forward=True)
+axs[1].set_xlabel('Settling / rise velocity')
+axs[0].set_ylabel('Count')
+axs[1].set_ylabel('Count')
+fig.savefig('settling-manta_vs_sed.png',dpi=200)
 
 ##
 

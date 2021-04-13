@@ -1,6 +1,9 @@
 """
 v05: try to refactor, process stormwater and effluent at the same time.
 process each category independently, sum at the end.
+
+
+output is now named v06, to indicate the adjustment for weathered particles
 """
 import os
 import re
@@ -25,7 +28,7 @@ import plastic_data
 
 ##
 
-version='v05'
+version='v06'
 
 # Assemble two primary dataframes
 # part_df: all particles

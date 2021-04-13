@@ -73,11 +73,16 @@ density['Phenolic resin']=1.3 # https://www.sciencedirect.com/topics/chemical-en
 # module:
 mean_fiber_width=0.09 # mm
 
-def record_to_ws(rec):
+def record_to_ws(rec,adjust_for_weathered=True):
     """
-    returns settling velocity, i.e. positive=sinking
+    returns settling velocity, i.e. positive=sinking.
+
+    adjust_for_weathered: if True, use coefficient in adjust_settling
+    to scale settling velocities according 2021 update of W&S2019.
     """
-    if rec['Category_Final']=='Foam':
+    if 'density' in rec:
+        rho_bulk=rec['density']
+    elif rec['Category_Final']=='Foam':
         # assume these are buoyant foams
         rho_bulk=0.1
     elif rec['PlasticType_Final'] in density:
@@ -154,6 +159,23 @@ def record_to_ws(rec):
 
     if rho_bulk < rho_water:
         w_x*=-1
+
+    if adjust_for_weathered:
+        # see adjust_settling for derivation of coefficients
+        if cat=='Foam':
+            w_x=0.411 * w_x
+        elif cat=='Film':
+            w_x=0.890 * w_x + 0.00817
+        elif cat=='Fragment':
+            w_x=0.319 * w_x
+        elif cat=='Sphere':
+            w_x=0.452 * w_x
+        elif cat in ['Fiber', 'Fiber Bundle']:
+            # no data for fibers, fiber bundles
+            pass
+        else:
+            raise Exception("Unexpected category '%s'"%cat)
+
     return w_x
 
 # note that some particles have high surface tension and are essentially surface-bound
