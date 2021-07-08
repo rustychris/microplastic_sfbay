@@ -71,7 +71,8 @@ def get_load_data():
     for fld in ['n_blank_particles','n_blank_samples','blank_rate',
                 'total_volume','n_samples','count_w_s','count_no_w_s',
                 'conc_raw','conc_noclip','conc_blank','blank_derate']:
-        del loads[fld]
+        if fld in loads:
+            del loads[fld]
 
     # Extend loads_orig with storm_scales
     storm_conc=loads_orig['conc'].sel(source='stormwater')
