@@ -373,11 +373,28 @@ def volume_per_particle(particles,rel,source,bc_ds):
 # This is a good time to add particle weight data, since
 # that is calculated on a group and time level.
 
-def query_group_particles(group_path,criteria,load_data,bc_ds):
+def query_group_particles(group_path,criteria,load_data,bc_ds,info_version='v00',
+                          deposit_thresh=None,beach_thresh=None):
     """
     Create a pd.DataFrame of particles from this group
     that satisfy criteria.
+
+    Now loads in pre-calculated cell and z_surface
     """
+    dtype=[ ('id',np.int32),
+            ('x0',np.float64),
+            ('x1',np.float64),
+            ('x2',np.float64),
+            ('active',np.int32),
+            ('time','<M8[us]'), # np.datetime64),
+            ('cell',np.int32),
+            ('z_surface',np.float32),
+            # ('group',np.str_),
+            # ('rel_time','<M8[us]'),
+            # ('mp_per_liter',np.float64),
+            # ('m3_per_particle',np.float64),
+            # ('mp_per_particle',np.float64)
+    ]
     def empty():
         # a request for a metadata frame or if no data found
         # While it looks like this creates a dataframe with
@@ -396,6 +413,8 @@ def query_group_particles(group_path,criteria,load_data,bc_ds):
         df['mp_per_liter']=np.float64(1.0)
         df['m3_per_particle']=np.float64(2.0)
         df['mp_per_particle']=np.float64(3.0)
+        df['cell']=np.int32(10)
+        df['z_surface']=np.int32(10)
         return df
 
     if group_path is None: 
@@ -405,14 +424,22 @@ def query_group_particles(group_path,criteria,load_data,bc_ds):
     source,behavior,rel_date=parse_group_path(group_path)
     
     pbf=ptm_tools.PtmBin(group_path)
-    times=np.array( [utils.to_dt64(t) for t in pbf.time] )
-
+    #times=np.array( [utils.to_dt64(t) for t in pbf.time] )
+    times=pbf.time.astype('<M8[us]')
+    
     sel=np.ones(len(times),np.bool8) # bitmask of which output steps to include
     if 't_min' in criteria:
         sel=sel&(times>=criteria['t_min'])
     if 't_max' in criteria:
         sel=sel&(times<=criteria['t_max'])
 
+    if info_version: # load precalculated cell, z_surface
+        info_fn=group_path+f"-{info_version}.nc"
+        assert os.path.exists(info_fn),"Did not find %s"%info_fn
+        info=xr.open_dataset(info_fn)
+    else:
+        info=None
+        
     all_particles=[]
     for ts in np.nonzero(sel)[0]:
         datenum,particles=pbf.read_timestep(ts)
@@ -427,33 +454,50 @@ def query_group_particles(group_path,criteria,load_data,bc_ds):
                 continue
             else:
                 particles=particles[sel]
-        t=utils.to_dt64(datenum)
-        df=pd.DataFrame({'id':particles['id'],
-                         'x0':particles['x'][:,0],
-                         'x1':particles['x'][:,1],
-                         'x2':particles['x'][:,2],
-                         'active':particles['active']})
+        
+        # df=pd.DataFrame({'id':particles['id'],
+        #                  'x0':particles['x'][:,0],
+        #                  'x1':particles['x'][:,1],
+        #                  'x2':particles['x'][:,2],
+        #                  'active':particles['active']})
+        # df['time']=t
+        dfn=np.zeros( len(particles),dtype=dtype)
+        dfn['id']=particles['id']
+        dfn['x0']=particles['x'][:,0]
+        dfn['x1']=particles['x'][:,1]
+        dfn['x2']=particles['x'][:,2]
+        dfn['active']=particles['active']
+        dfn['time']=times[ts]
         # Avoid keeping all this memmap'd data around
         del particles
-        df['time']=t
-        all_particles.append(df)
-    if len(all_particles):
-        df=pd.concat(all_particles)
-        df['group']=group_path
 
+        if info is not None:
+            dfn['cell']=info['cell'].isel(time=ts).isel(id=dfn['id']-1)
+            dfn['z_surface']=info['z_surf'].isel(time=ts).isel(id=dfn['id']-1)
+        
+        all_particles.append(dfn)
+    if len(all_particles):
+        # df=pd.concat(all_particles)
+        dfn=np.concatenate(all_particles)
+        df=pd.DataFrame.from_records(dfn)
+
+        df['group']=group_path
+                
         # Assign release times
         # If this is slow, could verify that release_log index 
         # is dense, and do this in numpy
         rel_log_fn=group_path.replace('_bin.out','.release_log')
         release_log=ptm_tools.ReleaseLog(rel_log_fn) # used below
         df_rel=release_log.data.set_index('id') # id vs gid?
-        rel_times=df_rel.loc[ df['id'].values,'date_time']
+        rel_times=df_rel.loc[df['id'], 'date_time']
         df['rel_time']=rel_times.values
-
+        
         if 'age_max' in criteria:
             sel = (df['time']-df['rel_time']) < criteria['age_max']
             if np.any(sel):
-                df=df[sel].copy() # otherwise further operations will error
+                #df=df[sel]
+                df=df.loc[sel,:]
+                df=df.copy() # otherwise further operations will error
             else:
                 return empty()
 
@@ -470,7 +514,7 @@ def query_group_particles(group_path,criteria,load_data,bc_ds):
         #                  mp_count / m3   *   m3 / particle
         mp_per_particle=mp_per_liter * 1e3 * m3_per_particle
         df['mp_per_particle']=mp_per_particle
-        
+            
         if len(df):
             return df
         else:
@@ -590,6 +634,8 @@ def get_particle_attrs(particles,grid,cfg,inplace=False,fallback=True):
     Calculate a pd.dataframe with cell, z_bed, z_surface from given particles.
     particles should be a pandas dataframe (not dask).
     Copies particles and adds the new columns
+
+    Now this does very little, as particles should come in with cell and z_surf
     """
     if not inplace:
         # or could make a second dataframe just sharing index?
@@ -597,17 +643,22 @@ def get_particle_attrs(particles,grid,cfg,inplace=False,fallback=True):
         
     if len(particles)==0:
         return particles # get_z_surface fails on empty input
-    
-    pnts=particles[['x0','x1']].values
-    cell=grid.points_to_cells(pnts)
-    if fallback:
-        missing=(cell<0)
-        log.info("%d/%d cells not found on first try"%(missing.sum(),len(missing)))
-        cell[missing]=grid.points_to_cells(pnts[missing],method='cells_nearest')
-                
-    particles['cell']=cell
+
+    if 'cell' not in particles.columns:
+        pnts=particles[['x0','x1']].values
+
+        cell=grid.points_to_cells(pnts) # ,method='mpl')
+        if fallback:
+            missing=(cell<0)
+            log.info("%d/%d cells not found on first try"%(missing.sum(),len(missing)))
+            cell[missing]=grid.points_to_cells(pnts[missing],method='cells_nearest')
+
+        particles['cell']=cell
+        
     particles['z_bed']=grid.cells['z_bed'][cell]
-    particles['z_surface']=get_z_surface(particles['time'].values,cell,cfg=cfg)
+
+    if 'z_surface' not in particles.columns:
+        particles['z_surface']=get_z_surface(particles['time'].values,cell,cfg=cfg)
     
     age_s=(particles['time']-particles['rel_time'])/np.timedelta64(1,'s')
     particles['age_s']=age_s
@@ -916,3 +967,4 @@ def group_weights(tdf,storm_factor=1.0):
             group_to_weight[grp]=storm_factor
     weights=tdf['group'].map(group_to_weight)
     return weights
+
