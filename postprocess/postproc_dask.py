@@ -125,8 +125,9 @@ source_ptm_to_load={
 def sun_path_to_hydro(sun_path):
     return os.path.join(sun_path,"ptm_average.nc_0000.nc")
 
-def open_hydro_ds(self,idx):
-    return xr.open_dataset()
+def hydro_ds(idx,cfg):
+    hyd_fn=sun_path_to_hydro(cfg['sun_paths'][idx])
+    return xr.open_dataset(hyd_fn)
 
 def load_hydro_timestamps(sun_paths):
     N=len(sun_paths)
@@ -523,6 +524,17 @@ def query_group_particles(group_path,criteria,load_data,bc_ds,info_version='v00'
     else:
         return empty()
 
+def t_to_idx(t,cfg):
+    """
+    Map a time (np.datetime64) to index of hydro runs
+    """
+    hydro_timestamps=cfg['hydro_timestamps']
+    N=hydro_timestamps.shape[0]
+    # search on ending to avoid one-off correction.
+    idx=np.searchsorted(hydro_timestamps[:,1],t).clip(0,N-1)
+    if t<hydro_timestamps[idx,0] or t>hydro_timestamps[idx,1]:
+        idx=9999999999 # force bounds issue
+    return idx
 
 def get_z_surface(p_time,p_cell,cfg):
     """
@@ -547,13 +559,6 @@ def get_z_surface(p_time,p_cell,cfg):
     t_max=p_order_time[-1]
 
     hydro_timestamps=cfg['hydro_timestamps']
-    N=hydro_timestamps.shape[0]
-    def t_to_idx(t):
-        # search on ending to avoid one-off correction.
-        idx=np.searchsorted(hydro_timestamps[:,1],t).clip(0,N-1)
-        if t<hydro_timestamps[idx,0] or t>hydro_timestamps[idx,1]:
-            idx=9999999999 # force bounds issue
-        return idx
     idx0,idxN=t_to_idx(t_min),t_to_idx(t_max)
 
     # hold the results, constructed in time order
@@ -808,7 +813,7 @@ def query_particle_concentration(criteria,cfg,grid,decay=None):
         
     particles['weighted_count']=weights*particles['mp_per_particle'].values
     
-    output_steps=1+int( (criteria['t_max'] - criteria['t_min'])/cfg['ptm_output_interval'])
+    output_steps=1+int( (criteria['t_max'] - criteria['t_min'])/self.cfg['ptm_output_interval'])
     scale=1./output_steps
     
     ds=particles_to_conc(particles,grid,smooth=0,scale=scale,
@@ -968,3 +973,67 @@ def group_weights(tdf,storm_factor=1.0):
     weights=tdf['group'].map(group_to_weight)
     return weights
 
+class CellStatus(object):
+    """
+    Query time-varying status of cells from the hydro.
+    Callable, takes a scalar timestamp, returns an array
+    with bitmask cell status:
+     0: wet, interior cell
+     1: dry cell based on water column depth less than self.dry_thresh.
+        For these sfb_ocean runs, that threshold is very large, though.
+     2: Dry or adjacent to a dry cell. 
+     4: adjacent to the grid boundary.
+    """
+    dry_thresh=0.2501
+    def __init__(self,grid,cfg):
+        self.grid=grid
+        self.cfg=cfg
+        self.prep_boundary()
+    def prep_boundary(self):
+        # static map of boundary cells:
+        self.cell_is_boundary=np.zeros(self.grid.Ncells(), np.bool8)
+        e2c=self.grid.edge_to_cells(recalc=True)
+
+        boundary_cells=e2c.max(axis=1)[e2c.min(axis=1)<0]
+        self.cell_is_boundary[boundary_cells]=True
+        # But that includes ocean BCs, so unmark those.
+        hyd=hydro_ds(0,self.cfg) # just load first hydro to get BC info
+        cell_is_bc=hyd['Mesh2_face_bc'].values>0
+        self.cell_is_boundary[cell_is_bc]=False
+        
+    def __call__(self,t):
+        hyd_i=t_to_idx(t,self.cfg)
+        hyd=hydro_ds(hyd_i,self.cfg)
+        hyd_tidx=np.searchsorted(hyd['Mesh2_data_time'].values,t)
+
+        h_grid=(hyd['Mesh2_sea_surface_elevation'].isel(nMesh2_data_time=hyd_tidx) 
+                + hyd['Mesh2_face_depth']).values
+        dry_grid=(h_grid<=self.dry_thresh)
+
+        dry_or_adjacent=dry_grid.copy()
+
+        for c in np.nonzero(dry_grid)[0]:
+            nbrs=self.grid.cell_to_cells(c)
+            dry_or_adjacent[nbrs]=True
+        
+        cell_status=( 1*dry_grid + 2*dry_or_adjacent + 4*self.cell_is_boundary)
+        return cell_status
+    
+    def fig_boundary(self): 
+        # Plot to be sure
+        import matplotlib.pyplot as plt
+        plt.figure()
+        self.grid.plot_cells(values=self.cell_is_boundary)
+        #grid.plot_cells(values=hyd['Mesh2_face_bc'])
+        plt.axis('tight')
+        plt.axis('equal')
+    def fig_status(self,t=np.datetime64('2017-10-18T00:00:00')):
+        import matplotlib.pyplot as plt
+        plt.figure()
+        cell_status=self(t)
+        #( 1*dry_grid + 2*dry_or_adjacent + 4*cell_is_boundary)
+        ccoll=self.grid.plot_cells(values=cell_status,cmap='turbo')
+        plt.colorbar(ccoll)
+        plt.axis('tight')
+        plt.axis('equal')
+        plt.axis((583465.196151308, 588970.7462226689, 4145479.2248639567, 4149581.7476590676))        
