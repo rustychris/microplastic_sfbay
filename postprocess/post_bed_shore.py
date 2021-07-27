@@ -5,8 +5,6 @@ Running totals of number of bed and shoreline interactions
 # [timestep,id] => (n_bed,n_shore)
 #
 
-# HERE
-
 from stompy.grid import unstructured_grid
 import postproc_dask as post
 

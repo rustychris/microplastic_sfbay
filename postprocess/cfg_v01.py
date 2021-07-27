@@ -5,7 +5,9 @@ import glob
 cfg=dict(
     ptm_base_dir="/opt2/sfb_ocean/ptm/all_source_022b",
     sun_base_dir="/opt2/sfb_ocean/suntans/runs",
-    ptm_output_interval=np.timedelta64(1,'h')
+    ptm_output_interval=np.timedelta64(1,'h'),
+    manta_out_dir="manta_sets_20210726e",
+    info_version='v01'
 )
 cfg['ptm_run_patt']=os.path.join(cfg['ptm_base_dir'],"chunk??","20??????")
 cfg['sun_patt']=os.path.join(cfg['sun_base_dir'],"merged_022_20??????")
