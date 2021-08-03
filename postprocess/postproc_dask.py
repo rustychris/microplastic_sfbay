@@ -382,7 +382,7 @@ def volume_per_particle(particles,rel,source,bc_ds):
 # This is a good time to add particle weight data, since
 # that is calculated on a group and time level.
 
-def query_group_particles(group_path,criteria,load_data,bc_ds,info_version='v01'):
+def query_group_particles(group_path,criteria,load_data,bc_ds,info_version='v01',grid=None):
     """
     Create a pd.DataFrame of particles from this group
     that satisfy criteria.
@@ -423,11 +423,13 @@ def query_group_particles(group_path,criteria,load_data,bc_ds,info_version='v01'
         df['rel_time']=np.datetime64("2000-01-01")
         df['cell']=np.int32(10)
         df['z_surface']=np.float32(10)
+        df['z_bed']=np.float32(11) # grid.cells['z_bed'][cell]
         df['bed_hits']=np.int16(10)
         df['shore_hits']=np.int16(10)
         df['mp_per_liter']=np.float32(1.0)
         df['m3_per_particle']=np.float32(2.0)
         df['mp_per_particle']=np.float32(3.0)
+        df['age_s']=np.float32(1234.0)
         return df
 
     if group_path is None: 
@@ -506,7 +508,9 @@ def query_group_particles(group_path,criteria,load_data,bc_ds,info_version='v01'
         df_rel=release_log.data.set_index('id') # id vs gid?
         rel_times=df_rel.loc[df['id'], 'date_time']
         df['rel_time']=rel_times.values
-        
+
+        df['age_s']=((df['time']-df['rel_time'])/np.timedelta64(1,'s')).astype(np.float32)
+
         if 'age_max' in criteria:
             sel = (df['time']-df['rel_time']) < criteria['age_max']
             if np.any(sel):
@@ -529,8 +533,12 @@ def query_group_particles(group_path,criteria,load_data,bc_ds,info_version='v01'
         #                  mp_count / m3   *   m3 / particle
         mp_per_particle=mp_per_liter * 1e3 * m3_per_particle
         df['mp_per_particle']=mp_per_particle.astype(np.float32)
-            
+
+        df['z_bed']=grid.cells['z_bed'][df['cell']]
+
         if len(df):
+            # Filter
+            df=filter_particles_post_attrs(df,criteria)
             # Force order to match template.
             tmpl=empty()
             return df[ tmpl.columns.tolist() ]
@@ -650,57 +658,56 @@ def get_z_surface(p_time,p_cell,cfg):
 # a parallel dataframe.
 
 # @dask.delayed(pure=True)
-def get_particle_attrs(particles,grid,cfg,inplace=False,fallback=True):
-    """
-    Calculate a pd.dataframe with cell, z_bed, z_surface from given particles.
-    particles should be a pandas dataframe (not dask).
-    Copies particles and adds the new columns
+# def get_particle_attrs(particles,grid,cfg,inplace=False,fallback=True):
+#     """
+#     Calculate a pd.dataframe with cell, z_bed, z_surface from given particles.
+#     particles should be a pandas dataframe (not dask).
+#     Copies particles and adds the new columns
+# 
+#     Now this does very little, as particles should come in with cell and z_surf
+#     """
+#     # if not inplace:
+#     #     # or could make a second dataframe just sharing index?
+#     #     particles=particles.copy()
+#     #     
+#     # if len(particles)==0:
+#     #     return particles # get_z_surface fails on empty input
+# 
+#     # if 'cell' not in particles.columns:
+#     #     pnts=particles[['x0','x1']].values
+#     # 
+#     #     cell=grid.points_to_cells(pnts) # ,method='mpl')
+#     #     if fallback:
+#     #         missing=(cell<0)
+#     #         log.info("%d/%d cells not found on first try"%(missing.sum(),len(missing)))
+#     #         cell[missing]=grid.points_to_cells(pnts[missing],method='cells_nearest')
+#     # 
+#     #     particles['cell']=cell
+#     # else:
+#     #     cell=particles['cell'].values
+#         
+#     #particles['z_bed']=grid.cells['z_bed'][cell]
+# 
+#     #if 'z_surface' not in particles.columns:
+#     #    particles['z_surface']=get_z_surface(particles['time'].values,cell,cfg=cfg)
+#     
+#     #age_s=(particles['time']-particles['rel_time'])/np.timedelta64(1,'s')
+#     #particles['age_s']=age_s
+#     return particles
 
-    Now this does very little, as particles should come in with cell and z_surf
-    """
-    if not inplace:
-        # or could make a second dataframe just sharing index?
-        particles=particles.copy()
-        
-    if len(particles)==0:
-        return particles # get_z_surface fails on empty input
+# meta=query_group_particles(None,None,None,None)
+# meta['cell']=np.int32(1)
+# meta['z_bed']=np.float64(1.0)
+# meta['z_surface']=np.float64(2.0)
+# meta['age_s']=np.float64(3.0)
+# get_particle_attrs.meta=meta
 
-    if 'cell' not in particles.columns:
-        pnts=particles[['x0','x1']].values
-
-        cell=grid.points_to_cells(pnts) # ,method='mpl')
-        if fallback:
-            missing=(cell<0)
-            log.info("%d/%d cells not found on first try"%(missing.sum(),len(missing)))
-            cell[missing]=grid.points_to_cells(pnts[missing],method='cells_nearest')
-
-        particles['cell']=cell
-    else:
-        cell=particles['cell'].values
-        
-    particles['z_bed']=grid.cells['z_bed'][cell]
-
-    if 'z_surface' not in particles.columns:
-        particles['z_surface']=get_z_surface(particles['time'].values,cell,cfg=cfg)
-    
-    age_s=(particles['time']-particles['rel_time'])/np.timedelta64(1,'s')
-    particles['age_s']=age_s
-    return particles
-
-meta=query_group_particles(None,None,None,None)
-meta['cell']=np.int32(1)
-meta['z_bed']=np.float64(1.0)
-meta['z_surface']=np.float64(2.0)
-meta['age_s']=np.float64(3.0)
-get_particle_attrs.meta=meta
-
+#def query_particles(criteria,cfg):
+#    part_attrs_d=query_particles_with_attrs(criteria,cfg=cfg)
+#    part_filtered=filter_particles_post_attrs(part_attrs_d,criteria)
+#    return part_filtered
 
 def query_particles(criteria,cfg):
-    part_attrs_d=query_particles_with_attrs(criteria,cfg=cfg)
-    part_filtered=filter_particles_post_attrs(part_attrs_d,criteria)
-    return part_filtered
-
-def query_particles_with_attrs(criteria,cfg):
     """
     Takes a criteria dictionary and returns an
     uncomputed dask dataframe with particles satisfying
@@ -716,7 +723,7 @@ def query_particles_with_attrs(criteria,cfg):
     reader=dask.delayed(query_group_particles,pure=True) # I think it's pure
 
     group_data_d=[reader(grp_fn,criteria,cfg['load_data_d'],cfg['bc_ds_d'],
-                         cfg['info_version'])
+                         cfg['info_version'],cfg['grid_d'])
                   for grp_fn in groups]
 
     parts_d=dd.from_delayed(group_data_d,
@@ -741,9 +748,11 @@ def query_particles_with_attrs(criteria,cfg):
         print("Will not repartition")
         repart=parts_d
 
-    part_attrs_d=repart.map_partitions(get_particle_attrs,cfg['grid_d'],cfg=cfg,
-                                       meta=get_particle_attrs.meta)
-    return part_attrs_d
+    # This is now wrapped into query_group_particles
+    #part_attrs_d=repart.map_partitions(get_particle_attrs,cfg['grid_d'],cfg=cfg,
+    #                                   meta=get_particle_attrs.meta)
+    
+    return parts_d
 
 def filter_particles_post_attrs(particles, criteria):
     """ Return a subset of particles that satisfy additional criteria
@@ -758,10 +767,7 @@ def filter_particles_post_attrs(particles, criteria):
     if 'z_above_bed_max' in criteria:
         sel=(part_filtered['x2']-part_filtered['z_bed'])<criteria['z_above_bed_max']
         part_filtered=part_filtered[sel]
-    if 'age_max' in criteria:
-        age_max_s=criteria['age_max']/np.timedelta64(1,'s')
-        sel=(part_filtered['age_s']<=age_max_s)
-        part_filtered=part_filtered[sel]
+    # if 'age_max' in criteria: # handled in query_group_particles
 
     for k in criteria:
         if k.startswith('z_') and k not in ['z_below_surface_max','z_above_bed_max']:
