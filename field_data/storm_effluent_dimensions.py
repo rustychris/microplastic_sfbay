@@ -67,7 +67,7 @@ axw.set_xscale('log')
 axw.set_xlabel('Width.mm')
 axw.set_ylabel('Count')
 
-axl.legend(lcolls,["Storm","Efflent"])
+axl.legend(lcolls,["Storm","Effluent"])
 
 fig.savefig("storm_effluent_dimensions.png",dpi=150)
 

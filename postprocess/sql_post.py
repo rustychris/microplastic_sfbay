@@ -297,7 +297,7 @@ def add_ptm_group_to_db(group,run,run_id,con,curs,grid,z_extractor=None,
         release.loc[bad,'gid_max']=release.loc[bad,'gid_min']+typical_count-1
 
     # add in volume information.
-    Qfunc=run.get_Qfunc_for_group(group)
+v    Qfunc=run.get_Qfunc_for_group(group)
     # no negative flows, which can happen with SJ river
     Q=Qfunc(release['time'].values).clip(0,np.inf)
 

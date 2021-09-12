@@ -305,6 +305,9 @@ for col in per_sample_per_cat.columns.values:
 
 cats=list(manta_no_labqa.Category_Final.unique())
 
+# Write blank rates to separate file
+blank_rates=[]
+
 adj_cats=[]
 for cat in cats:
     if cat=='Fiber':
@@ -322,6 +325,15 @@ for cat in cats:
     adj_cat=cat+'_adj' # name of column for adjust, post-blank removal count
     manta_per_sample2[adj_cat] = np.maximum(0, manta_per_sample2[cat]-mean_blank_per_sample_cat)
     adj_cats.append(adj_cat)
+    blank_rates.append(dict(cat=cat,blank_rate=mean_blank_per_sample_cat))
+
+pd.DataFrame(blank_rates).to_csv("blank_rates-v04.csv",index=False)
+
+##
+
+# 2021-09-12: Fit Poisson distribution to the contamination
+# https://en.wikipedia.org/wiki/Poisson_distribution#Parameter_estimation
+# Estimate rate simply from the mean
 
 ##
 
