@@ -59,7 +59,7 @@ def get_load_data():
     Load loading data, return an xr.Dataset that maps
     sources and behaviors to concentrations in particles/liter
     """
-    loads_orig=xr.open_dataset("../loads/plastic_loads-7classes-v05.nc")
+    loads_orig=xr.open_dataset("../loads/plastic_loads-7classes-v06.nc")
 
     # And the per-watershed scaling factor
     storm_scales=pd.read_csv("../loads/stormwater_concs-v02.csv")
@@ -71,7 +71,8 @@ def get_load_data():
     for fld in ['n_blank_particles','n_blank_samples','blank_rate',
                 'total_volume','n_samples','count_w_s','count_no_w_s',
                 'conc_raw','conc_noclip','conc_blank','blank_derate']:
-        del loads[fld]
+        if fld in loads:
+            del loads[fld]
 
     # Extend loads_orig with storm_scales
     storm_conc=loads_orig['conc'].sel(source='stormwater')
@@ -124,8 +125,17 @@ source_ptm_to_load={
 def sun_path_to_hydro(sun_path):
     return os.path.join(sun_path,"ptm_average.nc_0000.nc")
 
-def open_hydro_ds(self,idx):
-    return xr.open_dataset()
+# super basic caching
+_last_ds=[None,None]
+def hydro_ds(idx,cfg):
+    if _last_ds[0]==idx:
+        return _last_ds[1]
+    else:
+        hyd_fn=sun_path_to_hydro(cfg['sun_paths'][idx])
+        ds=xr.open_dataset(hyd_fn)
+        _last_ds[0]=idx
+        _last_ds[1]=ds
+        return ds
 
 def load_hydro_timestamps(sun_paths):
     N=len(sun_paths)
@@ -372,11 +382,30 @@ def volume_per_particle(particles,rel,source,bc_ds):
 # This is a good time to add particle weight data, since
 # that is calculated on a group and time level.
 
-def query_group_particles(group_path,criteria,load_data,bc_ds):
+def query_group_particles(group_path,criteria,load_data,bc_ds,info_version='v01',grid=None):
     """
     Create a pd.DataFrame of particles from this group
     that satisfy criteria.
+
+    Now loads in pre-calculated cell and z_surface
     """
+    print(group_path)
+    dtype=[ ('id',np.int32),
+            ('x0',np.float64),
+            ('x1',np.float64),
+            ('x2',np.float32),
+            ('active',np.int16),
+            ('time','<M8[us]'), # np.datetime64),
+            ('cell',np.int32),
+            ('z_surface',np.float32),
+            ('bed_hits',np.int16),
+            ('shore_hits',np.int16),
+            # ('group',np.str_),
+            # ('rel_time','<M8[us]'),
+            # ('mp_per_liter',np.float64),
+            # ('m3_per_particle',np.float64),
+            # ('mp_per_particle',np.float64)
+    ]
     def empty():
         # a request for a metadata frame or if no data found
         # While it looks like this creates a dataframe with
@@ -387,14 +416,20 @@ def query_group_particles(group_path,criteria,load_data,bc_ds):
         df['id']=np.int32(1)
         df['x0']=np.float64(2.0)
         df['x1']=np.float64(3.0)
-        df['x2']=np.float64(4.0)
-        df['active']=np.int32(5)
+        df['x2']=np.float32(4.0)
+        df['active']=np.int16(5)
         df['time']=np.datetime64("2000-01-01") # will there be trouble?
         df['group']="a-path-string"
         df['rel_time']=np.datetime64("2000-01-01")
-        df['mp_per_liter']=np.float64(1.0)
-        df['m3_per_particle']=np.float64(2.0)
-        df['mp_per_particle']=np.float64(3.0)
+        df['cell']=np.int32(10)
+        df['z_surface']=np.float32(10)
+        df['z_bed']=np.float32(11) # grid.cells['z_bed'][cell]
+        df['bed_hits']=np.int16(10)
+        df['shore_hits']=np.int16(10)
+        df['mp_per_liter']=np.float32(1.0)
+        df['m3_per_particle']=np.float32(2.0)
+        df['mp_per_particle']=np.float32(3.0)
+        df['age_s']=np.float32(1234.0)
         return df
 
     if group_path is None: 
@@ -404,14 +439,22 @@ def query_group_particles(group_path,criteria,load_data,bc_ds):
     source,behavior,rel_date=parse_group_path(group_path)
     
     pbf=ptm_tools.PtmBin(group_path)
-    times=np.array( [utils.to_dt64(t) for t in pbf.time] )
-
+    #times=np.array( [utils.to_dt64(t) for t in pbf.time] )
+    times=pbf.time.astype('<M8[us]')
+    
     sel=np.ones(len(times),np.bool8) # bitmask of which output steps to include
     if 't_min' in criteria:
         sel=sel&(times>=criteria['t_min'])
     if 't_max' in criteria:
         sel=sel&(times<=criteria['t_max'])
 
+    if info_version: # load precalculated cell, z_surface, bed_hits, shore_hits
+        info_fn=group_path+f"-{info_version}.nc"
+        assert os.path.exists(info_fn),"Did not find %s"%info_fn
+        info=xr.open_dataset(info_fn)
+    else:
+        info=None
+        
     all_particles=[]
     for ts in np.nonzero(sel)[0]:
         datenum,particles=pbf.read_timestep(ts)
@@ -426,58 +469,96 @@ def query_group_particles(group_path,criteria,load_data,bc_ds):
                 continue
             else:
                 particles=particles[sel]
-        t=utils.to_dt64(datenum)
-        df=pd.DataFrame({'id':particles['id'],
-                         'x0':particles['x'][:,0],
-                         'x1':particles['x'][:,1],
-                         'x2':particles['x'][:,2],
-                         'active':particles['active']})
+        
+        # df=pd.DataFrame({'id':particles['id'],
+        #                  'x0':particles['x'][:,0],
+        #                  'x1':particles['x'][:,1],
+        #                  'x2':particles['x'][:,2],
+        #                  'active':particles['active']})
+        # df['time']=t
+        dfn=np.zeros( len(particles),dtype=dtype)
+        dfn['id']=particles['id']
+        dfn['x0']=particles['x'][:,0]
+        dfn['x1']=particles['x'][:,1]
+        dfn['x2']=particles['x'][:,2]
+        dfn['active']=particles['active']
+        dfn['time']=times[ts]
         # Avoid keeping all this memmap'd data around
         del particles
-        df['time']=t
-        all_particles.append(df)
-    if len(all_particles):
-        df=pd.concat(all_particles)
-        df['group']=group_path
 
+        if info is not None:
+            dfn['cell']=info['cell'].isel(time=ts).isel(id=dfn['id']-1)
+            dfn['z_surface']=info['z_surf'].isel(time=ts).isel(id=dfn['id']-1)
+            dfn['bed_hits']=info['bed_hits'].isel(time=ts).isel(id=dfn['id']-1)
+            dfn['shore_hits']=info['shore_hits'].isel(time=ts).isel(id=dfn['id']-1)
+        
+        all_particles.append(dfn)
+    if len(all_particles):
+        # df=pd.concat(all_particles)
+        dfn=np.concatenate(all_particles)
+        df=pd.DataFrame.from_records(dfn)
+
+        df['group']=group_path
+                
         # Assign release times
         # If this is slow, could verify that release_log index 
         # is dense, and do this in numpy
         rel_log_fn=group_path.replace('_bin.out','.release_log')
         release_log=ptm_tools.ReleaseLog(rel_log_fn) # used below
         df_rel=release_log.data.set_index('id') # id vs gid?
-        rel_times=df_rel.loc[ df['id'].values,'date_time']
+        rel_times=df_rel.loc[df['id'], 'date_time']
         df['rel_time']=rel_times.values
+
+        df['age_s']=((df['time']-df['rel_time'])/np.timedelta64(1,'s')).astype(np.float32)
 
         if 'age_max' in criteria:
             sel = (df['time']-df['rel_time']) < criteria['age_max']
             if np.any(sel):
-                df=df[sel].copy() # otherwise further operations will error
+                #df=df[sel]
+                df=df.loc[sel,:]
+                df=df.copy() # otherwise further operations will error
             else:
                 return empty()
 
         # Associating numerical particles with load particles
         mp_per_liter=load_conc(source,behavior,criteria,load_data)
 
-        df['mp_per_liter']=mp_per_liter
+        df['mp_per_liter']=np.float32(mp_per_liter)
         # self.add_mp_count(df,criteria)
         # how many m3 of effluent does each computational particle
         # represent?
         m3_per_particle=volume_per_particle(df,release_log,source,bc_ds)
-        df['m3_per_particle']=m3_per_particle
+        df['m3_per_particle']=m3_per_particle.astype(np.float32)
         
         #                  mp_count / m3   *   m3 / particle
         mp_per_particle=mp_per_liter * 1e3 * m3_per_particle
-        df['mp_per_particle']=mp_per_particle
-        
+        df['mp_per_particle']=mp_per_particle.astype(np.float32)
+
+        df['z_bed']=grid.cells['z_bed'][df['cell']]
+
         if len(df):
-            return df
+            # Filter
+            df=filter_particles_post_attrs(df,criteria)
+            # Force order to match template.
+            tmpl=empty()
+            return df[ tmpl.columns.tolist() ]
         else:
             # maybe?
             return empty()
     else:
         return empty()
 
+def t_to_idx(t,cfg):
+    """
+    Map a time (np.datetime64) to index of hydro runs
+    """
+    hydro_timestamps=cfg['hydro_timestamps']
+    N=hydro_timestamps.shape[0]
+    # search on ending to avoid one-off correction.
+    idx=np.searchsorted(hydro_timestamps[:,1],t).clip(0,N-1)
+    if t<hydro_timestamps[idx,0] or t>hydro_timestamps[idx,1]:
+        idx=9999999999 # force bounds issue
+    return idx
 
 def get_z_surface(p_time,p_cell,cfg):
     """
@@ -502,14 +583,7 @@ def get_z_surface(p_time,p_cell,cfg):
     t_max=p_order_time[-1]
 
     hydro_timestamps=cfg['hydro_timestamps']
-    N=hydro_timestamps.shape[0]
-    def t_to_idx(t):
-        # search on ending to avoid one-off correction.
-        idx=np.searchsorted(hydro_timestamps[:,1],t).clip(0,N-1)
-        if t<hydro_timestamps[idx,0] or t>hydro_timestamps[idx,1]:
-            idx=9999999999 # force bounds issue
-        return idx
-    idx0,idxN=t_to_idx(t_min),t_to_idx(t_max)
+    idx0,idxN=t_to_idx(t_min,cfg),t_to_idx(t_max,cfg)
 
     # hold the results, constructed in time order
     p_order_eta=np.nan*np.zeros(len(p_time),np.float32)
@@ -584,42 +658,56 @@ def get_z_surface(p_time,p_cell,cfg):
 # a parallel dataframe.
 
 # @dask.delayed(pure=True)
-def get_particle_attrs(particles,grid,cfg,inplace=False,fallback=True):
-    """
-    Calculate a pd.dataframe with cell, z_bed, z_surface from given particles.
-    particles should be a pandas dataframe (not dask).
-    Copies particles and adds the new columns
-    """
-    if not inplace:
-        # or could make a second dataframe just sharing index?
-        particles=particles.copy()
-        
-    if len(particles)==0:
-        return particles # get_z_surface fails on empty input
-    
-    pnts=particles[['x0','x1']].values
-    cell=grid.points_to_cells(pnts)
-    if fallback:
-        missing=(cell<0)
-        log.info("%d/%d cells not found on first try"%(missing.sum(),len(missing)))
-        cell[missing]=grid.points_to_cells(pnts[missing],method='cells_nearest')
-                
-    particles['cell']=cell
-    particles['z_bed']=grid.cells['z_bed'][cell]
-    particles['z_surface']=get_z_surface(particles['time'].values,cell,cfg=cfg)
-    
-    age_s=(particles['time']-particles['rel_time'])/np.timedelta64(1,'s')
-    particles['age_s']=age_s
-    return particles
+# def get_particle_attrs(particles,grid,cfg,inplace=False,fallback=True):
+#     """
+#     Calculate a pd.dataframe with cell, z_bed, z_surface from given particles.
+#     particles should be a pandas dataframe (not dask).
+#     Copies particles and adds the new columns
+# 
+#     Now this does very little, as particles should come in with cell and z_surf
+#     """
+#     # if not inplace:
+#     #     # or could make a second dataframe just sharing index?
+#     #     particles=particles.copy()
+#     #     
+#     # if len(particles)==0:
+#     #     return particles # get_z_surface fails on empty input
+# 
+#     # if 'cell' not in particles.columns:
+#     #     pnts=particles[['x0','x1']].values
+#     # 
+#     #     cell=grid.points_to_cells(pnts) # ,method='mpl')
+#     #     if fallback:
+#     #         missing=(cell<0)
+#     #         log.info("%d/%d cells not found on first try"%(missing.sum(),len(missing)))
+#     #         cell[missing]=grid.points_to_cells(pnts[missing],method='cells_nearest')
+#     # 
+#     #     particles['cell']=cell
+#     # else:
+#     #     cell=particles['cell'].values
+#         
+#     #particles['z_bed']=grid.cells['z_bed'][cell]
+# 
+#     #if 'z_surface' not in particles.columns:
+#     #    particles['z_surface']=get_z_surface(particles['time'].values,cell,cfg=cfg)
+#     
+#     #age_s=(particles['time']-particles['rel_time'])/np.timedelta64(1,'s')
+#     #particles['age_s']=age_s
+#     return particles
 
-meta=query_group_particles(None,None,None,None)
-meta['cell']=np.int32(1)
-meta['z_bed']=np.float64(1.0)
-meta['z_surface']=np.float64(2.0)
-meta['age_s']=np.float64(3.0)
-get_particle_attrs.meta=meta
+# meta=query_group_particles(None,None,None,None)
+# meta['cell']=np.int32(1)
+# meta['z_bed']=np.float64(1.0)
+# meta['z_surface']=np.float64(2.0)
+# meta['age_s']=np.float64(3.0)
+# get_particle_attrs.meta=meta
 
-def query_particles_with_attrs(criteria,cfg):
+#def query_particles(criteria,cfg):
+#    part_attrs_d=query_particles_with_attrs(criteria,cfg=cfg)
+#    part_filtered=filter_particles_post_attrs(part_attrs_d,criteria)
+#    return part_filtered
+
+def query_particles(criteria,cfg):
     """
     Takes a criteria dictionary and returns an
     uncomputed dask dataframe with particles satisfying
@@ -634,40 +722,37 @@ def query_particles_with_attrs(criteria,cfg):
     # Following the suggestion here: https://github.com/dask/dask/issues/1680
     reader=dask.delayed(query_group_particles,pure=True) # I think it's pure
 
-    group_data_d=[reader(grp_fn,criteria,cfg['load_data_d'],cfg['bc_ds_d'])
+    group_data_d=[reader(grp_fn,criteria,cfg['load_data_d'],cfg['bc_ds_d'],
+                         cfg['info_version'],cfg['grid_d'])
                   for grp_fn in groups]
 
     parts_d=dd.from_delayed(group_data_d,
                             meta=query_group_particles(None,criteria,None,None))
 
-    # This is working.  But it's not super fast with many partitions
-    # repartition to 20 gets that down to 37s.
-    # repartition to 40 is 40s.
-    # repartition to 8 ... ? 60s.
-    # repartition to 30MB => 1m10 (and 180 partitions)
-    # repartition to 150MB => 50s (and 30 partitions)
-    # How does this scale?  All those numbers are with 8 workers.
-    # 16 workers=>30s. Not amazing strong scaling. Maybe we get
-    # weak scaling, though.
-
-    # fine for smaller jobs
-    # ngrps=len(groups)
-    if ('t_max' in criteria) and ('t_min') in criteria:
-        dt=(criteria['t_max']-criteria['t_min'])
-    else:
-        dt=np.timedelta64(60,'D')
-    n_output_steps=dt/np.timedelta64(1,'h')
     # empirical estimate. This had been using grps instead of groups,
     # which was probably wrong. in that case, it divided by 300.
     # Try dividing by 1000 now instead.
-    npartitions=max(1,int(len(groups)*n_output_steps / 1000.0))
-    print(f"Will repartition with {npartitions} partitions")
-    repart=parts_d.repartition(npartitions=npartitions)
-    # For larger jobs, try auto scaling by size:
-    #repart=parts_d.repartition(partition_size="150MB")
-    part_attrs_d=repart.map_partitions(get_particle_attrs,cfg['grid_d'],cfg=cfg,
-                                       meta=get_particle_attrs.meta)
-    return part_attrs_d
+    # When I had to calculate cells online, it was necessary to
+    # repartition.  Probably not that important now.
+    if 0:
+        if ('t_max' in criteria) and ('t_min') in criteria:
+            dt=(criteria['t_max']-criteria['t_min'])
+        else:
+            dt=np.timedelta64(60,'D')
+        n_output_steps=dt/np.timedelta64(1,'h')
+        
+        npartitions=max(1,int(len(groups)*n_output_steps / 1000.0))
+        print(f"Will repartition with {npartitions} partitions")
+        repart=parts_d.repartition(npartitions=npartitions)
+    else:
+        print("Will not repartition")
+        repart=parts_d
+
+    # This is now wrapped into query_group_particles
+    #part_attrs_d=repart.map_partitions(get_particle_attrs,cfg['grid_d'],cfg=cfg,
+    #                                   meta=get_particle_attrs.meta)
+    
+    return parts_d
 
 def filter_particles_post_attrs(particles, criteria):
     """ Return a subset of particles that satisfy additional criteria
@@ -682,20 +767,13 @@ def filter_particles_post_attrs(particles, criteria):
     if 'z_above_bed_max' in criteria:
         sel=(part_filtered['x2']-part_filtered['z_bed'])<criteria['z_above_bed_max']
         part_filtered=part_filtered[sel]
-    if 'age_max' in criteria:
-        age_max_s=criteria['age_max']/np.timedelta64(1,'s')
-        sel=(part_filtered['age_s']<=age_max_s)
-        part_filtered=part_filtered[sel]
+    # if 'age_max' in criteria: # handled in query_group_particles
 
     for k in criteria:
         if k.startswith('z_') and k not in ['z_below_surface_max','z_above_bed_max']:
             raise Exception("Possible misspelling: %s"%k)
     return part_filtered
 
-def query_particles(criteria,cfg):
-    part_attrs_d=query_particles_with_attrs(criteria,cfg=cfg)
-    part_filtered=filter_particles_post_attrs(part_attrs_d,criteria)
-    return part_filtered
 
 # Particle->grid mapping code
 def particles_to_conc(particles,grid,
@@ -756,7 +834,7 @@ def query_particle_concentration(criteria,cfg,grid,decay=None):
         
     particles['weighted_count']=weights*particles['mp_per_particle'].values
     
-    output_steps=1+int( (criteria['t_max'] - criteria['t_min'])/cfg['ptm_output_interval'])
+    output_steps=1+int( (criteria['t_max'] - criteria['t_min'])/self.cfg['ptm_output_interval'])
     scale=1./output_steps
     
     ds=particles_to_conc(particles,grid,smooth=0,scale=scale,
@@ -839,7 +917,8 @@ if 1:
     # godwin[delta_hours + h_offset] gives the weight for the time average
     # of a sample taken delta_hours away from t_center
 
-def particles_for_date(rec_DATE,cfg,criteria={},include_godin=True,cache=True):
+def particles_for_date(rec_DATE,cfg,criteria={},include_godin=True,cache=True,
+                       compute_kw={}):
     """
     Query particles centered around the given date, as a string.
     Assumes the date has no time information
@@ -887,7 +966,7 @@ def particles_for_date(rec_DATE,cfg,criteria={},include_godin=True,cache=True):
                       age_max=np.timedelta64(60,'D'))
         defaults.update(criteria)
         part_d=query_particles(criteria=defaults,cfg=cfg)    
-        df=part_d.compute()
+        df=part_d.compute(**compute_kw)
         if cache:
             df.to_parquet(fn)
     else:
@@ -915,3 +994,85 @@ def group_weights(tdf,storm_factor=1.0):
             group_to_weight[grp]=storm_factor
     weights=tdf['group'].map(group_to_weight)
     return weights
+
+class CellStatus(object):
+    """
+    Query time-varying status of cells from the hydro.
+    Callable, takes a scalar timestamp, returns an array
+    with bitmask cell status:
+     0: wet, interior cell
+     1: dry cell based on water column depth less than self.dry_thresh.
+        For these sfb_ocean runs, that threshold is very large, though.
+     2: Dry or adjacent to a dry cell. 
+     4: adjacent to the grid boundary.
+    """
+    dry_thresh=0.2501
+    def __init__(self,grid,cfg):
+        self.grid=grid
+        self.cfg=cfg
+        self.prep_boundary()
+
+        # preprocess cell_to_cells
+        self.c2c=-np.ones( (grid.Ncells(), grid.max_sides), np.int32)
+        for c in range(self.grid.Ncells()):
+            self.c2c[c,:]=self.grid.cell_to_cells(c,pad=True)
+            
+    def prep_boundary(self):
+        # static map of boundary cells:
+        self.cell_is_boundary=np.zeros(self.grid.Ncells(), np.bool8)
+        e2c=self.grid.edge_to_cells(recalc=True)
+
+        boundary_cells=e2c.max(axis=1)[e2c.min(axis=1)<0]
+        self.cell_is_boundary[boundary_cells]=True
+        # But that includes ocean BCs, so unmark those.
+        # Since the ocean has BCs that are flow and some that are stage,
+        # can't just use the face bc mark.
+        hyd=hydro_ds(0,self.cfg) # just load first hydro to get BC info
+        cell_is_bc=hyd['Mesh2_face_bc'].values>0
+        cell_is_ocean=hyd['Mesh2_face_depth'].values>50 # well, ggate, but doesn't matter.
+        self.cell_is_boundary[cell_is_bc & cell_is_ocean]=False
+        
+    def __call__(self,t,vector=True):
+        hyd_i=t_to_idx(t,self.cfg)
+        hyd=hydro_ds(hyd_i,self.cfg)
+        hyd_tidx=np.searchsorted(hyd['Mesh2_data_time'].values,t)
+
+        h_grid=(hyd['Mesh2_sea_surface_elevation'].isel(nMesh2_data_time=hyd_tidx) 
+                + hyd['Mesh2_face_depth']).values
+        dry_grid=(h_grid<=self.dry_thresh)
+
+        dry_or_adjacent=dry_grid.copy()
+
+
+        if vector: # Vectorized version
+            nbrs=self.c2c[dry_grid,:]
+            nbrs=np.unique(nbrs[nbrs>=0])
+            dry_or_adjacent[nbrs]=True
+        else: # Manual version
+            for c in np.nonzero(dry_grid)[0]:
+                nbrs=self.grid.cell_to_cells(c)
+                # This is some sort of bug. Getting some -2 here.
+                assert np.all(np.array(nbrs)>=0)
+                dry_or_adjacent[nbrs]=True
+        
+        cell_status=( 1*dry_grid + 2*dry_or_adjacent + 4*self.cell_is_boundary)
+        return cell_status
+    
+    def fig_boundary(self): 
+        # Plot to be sure
+        import matplotlib.pyplot as plt
+        plt.figure()
+        self.grid.plot_cells(values=self.cell_is_boundary)
+        #grid.plot_cells(values=hyd['Mesh2_face_bc'])
+        plt.axis('tight')
+        plt.axis('equal')
+    def fig_status(self,t=np.datetime64('2017-10-18T00:00:00')):
+        import matplotlib.pyplot as plt
+        plt.figure()
+        cell_status=self(t)
+        #( 1*dry_grid + 2*dry_or_adjacent + 4*cell_is_boundary)
+        ccoll=self.grid.plot_cells(values=cell_status,cmap='turbo')
+        plt.colorbar(ccoll)
+        plt.axis('tight')
+        plt.axis('equal')
+        plt.axis((583465.196151308, 588970.7462226689, 4145479.2248639567, 4149581.7476590676))        

@@ -17,8 +17,8 @@ class BayConcFigure(object):
     figsize=(8.4,8)
     ax=None
     fig=None
-    vmin=1e-3
-    vmax=100.0
+    vmin=1e-2
+    vmax=500.0
     zoom=(517521., 609000., 4139744., 4230000.)
     cmap=cmap
     cax_loc=[0.7,0.25,0.03,0.35] # normalized to axis
