@@ -10,3 +10,5 @@ manta_sets*
 snapshots-v*
 dask-worker-space
 surface-frames-v*
+perf_test
+surface-tidal-frames-*
