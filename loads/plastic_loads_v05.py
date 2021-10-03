@@ -28,16 +28,31 @@ import plastic_data
 
 ##
 
-version='v06'
+# _355 means only the SizeFraction_Final with the larger
+# sieve is used, for better comparison against manta data.
+version='v06_355'
 
 # Assemble two primary dataframes
 # part_df: all particles
 # sample_df: all samples, with a many:1 mapping to stations
 
+storm_df=plastic_data.storm_df
+effluent_df=plastic_data.effluent_df
+
+# For the _355 version, omit small size fractions
+if '_355' in version:
+    print("Limiting load samples to >=355um size class(es)")
+    storm_sel=(storm_df['SizeFraction_Final']!='125um-355um').values
+    print("Stormwater: selecting %d/%d samples on size class"%(storm_sel.sum(), len(storm_sel)))
+    storm_df=storm_df[storm_sel]
+    effluent_sel=(effluent_df['SizeFraction_Final']!=125).values
+    print("Wastewater: selecting %d/%d samples on size class"%(effluent_sel.sum(), len(effluent_sel)))
+    effluent_df=effluent_df[effluent_sel].copy()
+
 # trim down the source dataframes before merging
 slim_fields=['SampleID','Category_Final','StationCode','pathway','w_s','field_sample_p']
-storm_slim=plastic_data.storm_df.loc[:,slim_fields].copy()
-waste_slim=plastic_data.effluent_df.loc[:,slim_fields].copy()
+storm_slim=storm_df.loc[:,slim_fields].copy()
+waste_slim=effluent_df.loc[:,slim_fields].copy()
 
 # For stormwater, omit the "Bottle Blank" per discussion with Diana
 storm_slim=storm_slim[storm_slim['SampleID']!='Bottle Blank']
@@ -368,7 +383,8 @@ source_sel=np.array( [isinstance(s,str) for s in ds.source.values] )
 ds=ds.isel(source=source_sel)
 # cast the objects to unicode string
 for obj_fld in ['pathway','category','source']:
-    ds[obj_fld].values = ds[obj_fld].values.astype('U')
+    #ds[obj_fld].values = ds[obj_fld].values.astype('U')
+    ds[obj_fld] = ds[obj_fld].dims, ds[obj_fld].values.astype('U')
 
 # add some metadata to help with poor memory...
 ds.conc.attrs['units']='particle l-1'
