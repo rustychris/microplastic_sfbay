@@ -12,3 +12,5 @@ dask-worker-space
 surface-frames-v*
 perf_test
 surface-tidal-frames-*
+*.parquet
+*.h5
