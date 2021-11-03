@@ -38,7 +38,8 @@ from postproc_dask import (config_malloc,get_load_data,
                            parse_group_path, criteria_to_groups,
                            load_conc,volume_per_particle,
                            query_group_particles, t_to_idx,
-                           get_particle_attrs, filter_particles_post_attrs,
+                           #get_particle_attrs,
+                           filter_particles_post_attrs,
                            particles_to_conc, rec_to_cell_weights, 
                            group_weights )
 
@@ -46,53 +47,50 @@ from postproc_dask import (config_malloc,get_load_data,
 
 from cfg_v01 import cfg
 
-# Load the grid into... grid
-hydro_path=cfg['sun_paths'][0]
-ptm_ds=xr.open_dataset(os.path.join(hydro_path,"ptm_average.nc_0000.nc"))
-grid=unstructured_grid.UnstructuredGrid.read_ugrid(ptm_ds,dialect='fishptm')
-ptm_ds.close()
-
-cfg['bc_ds_d']=bc_ds(cfg)
-cfg['load_data_d']=get_load_data()
-
 def helper(args):
+    print("%",end='') # feed back on start of group 
     grp_fn,criteria=args
-    particles=query_group_particles(grp_fn,criteria,cfg['load_data_d'],cfg['bc_ds_d'],cfg['info_version'])
+    particles=query_group_particles(grp_fn,criteria,cfg['load_data_d'],cfg['bc_ds_d'],cfg['info_version'],
+                                    grid=cfg.grid)
 
     assert 'cell' in particles.columns
-    cell=particles['cell'].values
-    particles['z_bed']=grid.cells['z_bed'][cell].astype(np.float32)
+    assert 'z_bed' in particles.columns,"I thought this was handled now"
+    #cell=particles['cell'].values
+    #particles['z_bed']=cfg.grid.cells['z_bed'][cell].astype(np.float32)
     assert 'z_surface' in particles.columns
-    age_s=(particles['time']-particles['rel_time'])/np.timedelta64(1,'s')
-    particles['age_s']=age_s.astype(np.float32)
+    assert 'age_s' in particles.columns
+    #age_s=(particles['time']-particles['rel_time'])/np.timedelta64(1,'s')
+    #particles['age_s']=age_s.astype(np.float32)
 
     # Filter at this level
-    part_filtered=filter_particles_post_attrs(particles,criteria)
-    
-    return part_filtered
+    # part_filtered=filter_particles_post_attrs(particles,criteria)
+    # return part_filtered
+
+    # Filtering now in query_group_particles
+    return particles
 
 def query_particles(criteria,cfg,compute_kw={}):
     """
-    Takes a criteria dictionary and returns an
-    uncomputed dask dataframe with particles satisfying
+    Takes a criteria dictionary and returns a
+    dataframe with particles satisfying
     the criteria
     Includes particle counts scaled from loads, relative
     z coordinates.
     """
     # Warm start more like 2s. 
     groups=criteria_to_groups(criteria,cfg=cfg)
-    #groups=groups[:50] # DBG
     
     if 'pool' in compute_kw:
         pool=compute_kw['pool']
         group_iter=pool.imap_unordered(helper,
                                        [ [grp_fn,criteria] for grp_fn in groups])
     else:
-        group_iter=(helper(grp_fn,criteria) for grp_fn in groups)
+        group_iter=(helper( [grp_fn,criteria] ) for grp_fn in groups)
 
     mem_total=0
     group_data=[]
-    for particles in group_iter:
+    for particles in utils.progress(group_iter,count=len(groups)):
+        print("$",end='') # signal a group is done
         mem_total+=particles.memory_usage().sum()
         group_data.append(particles)
         
@@ -177,6 +175,7 @@ def particles_for_date(rec_DATE,cfg,criteria={},include_godin=True,cache=True,
         fn=os.path.join(out_dir,f"v01-{rec_DATE[:10]}.nc")
     
     if (not cache) or (not os.path.exists(fn)):
+        print("Querying PTM data")
         # pull a generous buffer of particles here, and narrow
         # the time zones are annoying but I double-checked and
         # this does give enough of a buffer.
@@ -207,6 +206,7 @@ def particles_for_date(rec_DATE,cfg,criteria={},include_godin=True,cache=True,
         if cache:
             df.to_parquet(fn)
     else:
+        print("Reading from cache")
         df=pd.read_parquet(fn)
 
     if include_godin:
@@ -215,7 +215,8 @@ def particles_for_date(rec_DATE,cfg,criteria={},include_godin=True,cache=True,
         t_center = t_sample+np.timedelta64(8,'h') + np.timedelta64(12,'h')
         delta_hours=((df['time']-t_center)/np.timedelta64(1,'h')).astype(np.int32)
         df['weight_time']=godwin[delta_hours+godwin_offset_h]
-        
+
+    print("done")
     return df
 
 import resource
@@ -224,19 +225,26 @@ if __name__=="__main__":
     if not os.path.exists(cfg['manta_out_dir']):
         os.makedirs(cfg['manta_out_dir'])
 
+    manta_fn='manta_summary-v03.csv'
+    manta=pd.read_csv(manta_fn)        
+
     ru=resource.getrusage(resource.RUSAGE_SELF)
     print("RSS: ",ru.ru_maxrss)
         
-    pool=mp.Pool(24)
     import time
-    t=time.time()
-    # import cProfile as prof
-    df=particles_for_date("2017-10-21 00:00:00",cfg=cfg,cache=False,
-                          compute_kw={'pool':pool})
-    print("Rows returned: ",len(df))
-    print("Elapsed seconds:",time.time() - t)
-    print("Memory for final result:")
-    print(df.memory_usage().sum())
+    
+    with mp.Pool(24) as pool:
+        t=time.time()
+        # import cProfile as prof
+        for date in manta['DATE'].unique():
+            print(date)
+            df=particles_for_date(date,cfg=cfg,cache=True,
+                                  compute_kw={'pool':pool})
+            print("Rows returned: ",len(df))
+            print("Elapsed seconds:",time.time() - t)
+            print("Memory for final result:")
+            print(df.memory_usage().sum())
+            del df
     
     ru=resource.getrusage(resource.RUSAGE_SELF)
     print("RSS: ",ru.ru_maxrss)

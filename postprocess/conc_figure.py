@@ -79,12 +79,15 @@ class BayConcFigure(object):
             self.ds.close()
         except AttributeError:
             pass
-    def add_labels(self):
+    def texts(self):
         texts=self.behavior_label()
         texts+=self.average_label()
         texts+=self.date_label()
         texts+=self.age_label()
         texts+=self.extra_text
+
+    def add_labels(self):
+        texts=self.texts()
         self.ax.text(self.txt_loc[0],self.txt_loc[1],"\n".join(texts),
                      fontsize=self.fontsize,va='top',ha='left',transform=self.ax.transAxes)
     def behavior_label(self):

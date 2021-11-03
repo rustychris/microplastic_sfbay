@@ -54,12 +54,13 @@ def config_malloc():
 config_malloc()
 
 # Load data 
-def get_load_data():
+def get_load_data(version="v06_355"):
     """
     Load loading data, return an xr.Dataset that maps
     sources and behaviors to concentrations in particles/liter
     """
-    loads_orig=xr.open_dataset("../loads/plastic_loads-7classes-v06.nc")
+    print("Loading version %s loads"%version)
+    loads_orig=xr.open_dataset("../loads/plastic_loads-7classes-%s.nc"%version)
 
     # And the per-watershed scaling factor
     storm_scales=pd.read_csv("../loads/stormwater_concs-v02.csv")
@@ -79,14 +80,25 @@ def get_load_data():
     storm_conc_net=storm_conc.values.sum()
     storm_conc_net # 8.50 particles/l
 
-    watershed_conc=np.zeros( (len(storm_scales),loads_orig.dims['category'],loads_orig.dims['w_s']))
+    storm_conc_raw=loads_orig['conc_raw'].sel(source='stormwater')
+    storm_conc_raw_net=storm_conc_raw.values.sum()
+    
+    # Watershed data is used to scale the original distribution, averaged over all
+    # stormwater samples, to a per-watershed load concentration based on land-use.
+    # the distribution of particle types and settling velocities is not [currently]
+    # adapted to the land use types in the watershed.
+    watershed_conc    =np.zeros( (len(storm_scales),loads_orig.dims['category'],loads_orig.dims['w_s']))
+    watershed_conc_raw=np.zeros( (len(storm_scales),loads_orig.dims['category'],loads_orig.dims['w_s']))
+    
     # bui(source, category, w_s) 
     for storm_i,storm_scale in storm_scales.iterrows():
-        watershed_conc[storm_i,:,:] = storm_conc.values * storm_scale['net_coeff_scaled'] / storm_conc_net
+        watershed_conc[storm_i,:,:]     = storm_conc.values     * storm_scale['net_coeff_scaled'] / storm_conc_net
+        watershed_conc_raw[storm_i,:,:] = storm_conc_raw.values * storm_scale['net_coeff_scaled'] / storm_conc_raw_net
 
     watershed_loads=xr.Dataset()
     watershed_loads['source']=('source',),storm_scales['source']
     watershed_loads['conc']=('source','category','w_s'),watershed_conc
+    watershed_loads['conc_raw']=('source','category','w_s'),watershed_conc_raw
     watershed_loads['source_pathway']=('source',),['stormwater']*len(storm_scales)
     watershed_loads['pathway']=loads_orig['pathway']
 
@@ -254,6 +266,13 @@ def criteria_to_groups(criteria,cfg):
         if len(run_group_paths)==0:
             log.warning(f"Run path {run_path} had no groups")
             continue
+        if 'group_patt' in criteria:
+            patt=re.compile(criteria['group_patt'])
+            N=len(run_group_paths)
+            run_group_paths=[g for g in run_group_paths if patt.match(g)]
+            print("Pattern narrowed groups from %d to %d"%(N,len(run_group_paths)))
+            if len(run_group_paths)==0:
+                continue
         group0_path=run_group_paths[0]
         pb=ptm_tools.PtmBin(fn=group0_path)
 
@@ -389,7 +408,7 @@ def query_group_particles(group_path,criteria,load_data,bc_ds,info_version='v01'
 
     Now loads in pre-calculated cell and z_surface
     """
-    print(group_path)
+    # print(group_path)
     dtype=[ ('id',np.int32),
             ('x0',np.float64),
             ('x1',np.float64),
@@ -650,62 +669,8 @@ def get_z_surface(p_time,p_cell,cfg):
     z_surface=p_order_eta[np.argsort(p_order)]
     return z_surface
 
-
-# particle attributes (cell, z coordinate)
-# we run at the partition level (and maybe after
-# repartitioning)
-# First, just deal with computing these fields, putting them into
-# a parallel dataframe.
-
-# @dask.delayed(pure=True)
-# def get_particle_attrs(particles,grid,cfg,inplace=False,fallback=True):
-#     """
-#     Calculate a pd.dataframe with cell, z_bed, z_surface from given particles.
-#     particles should be a pandas dataframe (not dask).
-#     Copies particles and adds the new columns
-# 
-#     Now this does very little, as particles should come in with cell and z_surf
-#     """
-#     # if not inplace:
-#     #     # or could make a second dataframe just sharing index?
-#     #     particles=particles.copy()
-#     #     
-#     # if len(particles)==0:
-#     #     return particles # get_z_surface fails on empty input
-# 
-#     # if 'cell' not in particles.columns:
-#     #     pnts=particles[['x0','x1']].values
-#     # 
-#     #     cell=grid.points_to_cells(pnts) # ,method='mpl')
-#     #     if fallback:
-#     #         missing=(cell<0)
-#     #         log.info("%d/%d cells not found on first try"%(missing.sum(),len(missing)))
-#     #         cell[missing]=grid.points_to_cells(pnts[missing],method='cells_nearest')
-#     # 
-#     #     particles['cell']=cell
-#     # else:
-#     #     cell=particles['cell'].values
-#         
-#     #particles['z_bed']=grid.cells['z_bed'][cell]
-# 
-#     #if 'z_surface' not in particles.columns:
-#     #    particles['z_surface']=get_z_surface(particles['time'].values,cell,cfg=cfg)
-#     
-#     #age_s=(particles['time']-particles['rel_time'])/np.timedelta64(1,'s')
-#     #particles['age_s']=age_s
-#     return particles
-
-# meta=query_group_particles(None,None,None,None)
-# meta['cell']=np.int32(1)
-# meta['z_bed']=np.float64(1.0)
-# meta['z_surface']=np.float64(2.0)
-# meta['age_s']=np.float64(3.0)
-# get_particle_attrs.meta=meta
-
-#def query_particles(criteria,cfg):
-#    part_attrs_d=query_particles_with_attrs(criteria,cfg=cfg)
-#    part_filtered=filter_particles_post_attrs(part_attrs_d,criteria)
-#    return part_filtered
+# get_particle_attrs() went away because the information it was adding
+# is now handled in query_group_particles
 
 def query_particles(criteria,cfg):
     """
@@ -859,6 +824,16 @@ def query_particle_concentration(criteria,cfg,grid,decay=None):
     
     return ds
 
+def apply_smooth(c,Msmooth,smooth):
+    if smooth>0:
+        for _ in range(smooth):
+            c=Msmooth.dot(c)
+    elif smooth<0:
+        I=sparse.eye(*Msmooth.shape)
+        M_implicit=I-(Msmooth-I)*(-smooth)
+        c=sparse.linalg.spsolve(M_implicit,c)
+    return c
+
 def rec_to_cell_weights(rec,areas,grid,Msmooth,smooth=30,thresh=1e-5):
     """ Convert manta record entries to cell indexes and weights
     returns tuple ( [idx,idx,...], [weight,weight,...] )
@@ -885,13 +860,7 @@ def rec_to_cell_weights(rec,areas,grid,Msmooth,smooth=30,thresh=1e-5):
     imp=np.zeros(grid.Ncells(),np.float64)
     imp[cells]=1.0 
 
-    if smooth>0:
-        for _ in range(smooth):
-            imp=Msmooth.dot(imp)
-    elif smooth<0:
-        I=sparse.eye(*Msmooth.shape)
-        M_implicit=I-(Msmooth-I)*(-smooth)
-        imp=sparse.linalg.spsolve(M_implicit,imp)
+    imp=apply_smooth(imp,Msmooth,smooth)
         
     # and now area weighted:
     sel=imp>0
